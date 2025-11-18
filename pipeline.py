@@ -21,37 +21,37 @@ class GSLMPipeline(nn.Module):
         if self.conf.model.decoder == "OpenELM-270M":
             from transformers import AutoModelForCausalLM
             attn_implementation = "flash_attention_2" if self.conf.model.flash_attention else "eager"
-            torch_dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() or attn_implementation == 'flash_attention_2' else torch.float32
+            dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() or attn_implementation == 'flash_attention_2' else torch.float32
             model = AutoModelForCausalLM.from_pretrained(
                 "apple/OpenELM-270M", 
-                torch_dtype=torch_dtype, 
+                dtype=dtype, 
                 trust_remote_code=True
             )
         elif self.conf.model.decoder == "OpenELM-450M":
             from transformers import AutoModelForCausalLM
             attn_implementation = "flash_attention_2" if self.conf.model.flash_attention else "eager"
-            torch_dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() or attn_implementation == 'flash_attention_2' else torch.float32
+            dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() or attn_implementation == 'flash_attention_2' else torch.float32
             model = AutoModelForCausalLM.from_pretrained(
                 "apple/OpenELM-450M", 
-                torch_dtype=torch_dtype, 
+                dtype=dtype, 
                 trust_remote_code=True
             )
         elif self.conf.model.decoder == "OpenELM-1B":
             from transformers import AutoModelForCausalLM
             attn_implementation = "flash_attention_2" if self.conf.model.flash_attention else "eager"
-            torch_dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() or attn_implementation == 'flash_attention_2' else torch.float32
+            dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() or attn_implementation == 'flash_attention_2' else torch.float32
             model = AutoModelForCausalLM.from_pretrained(
                 "apple/OpenELM-1_1B", 
-                torch_dtype=torch_dtype, 
+                dtype=dtype, 
                 trust_remote_code=True
             )
         elif self.conf.model.decoder == "OpenELM-3B":
             from transformers import AutoModelForCausalLM
             attn_implementation = "flash_attention_2" if self.conf.model.flash_attention else "eager"
-            torch_dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() or attn_implementation == 'flash_attention_2' else torch.float32
+            dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() or attn_implementation == 'flash_attention_2' else torch.float32
             model = AutoModelForCausalLM.from_pretrained(
                 "apple/OpenELM-3B", 
-                torch_dtype=torch_dtype, 
+                dtype=dtype, 
                 trust_remote_code=True
             )
             

@@ -8,7 +8,7 @@ import torch
 import torch.nn.functional as F
 import numpy as np
 from typing import Optional, Tuple
-from fairseq.data.data_utils import compute_mask_indices
+#from fairseq.data.data_utils import compute_mask_indices
 
 
 def apply_mask(
