@@ -182,7 +182,7 @@ class LanguageModeling(pl.LightningModule):
         token_accs = None
         if token_loss_val is not None:
             # monitor first future token when available
-            if hasattr(self.conf.model, "extra_future_tokens") and self.conf.model.extra_future_tokens > 0:
+            if hasattr(self.conf.model, "extra_future_tokens") and self.conf.model.extra_future_tokens > 1:
                 token_logits_i = torch.chunk(self.last_token_logits, self.conf.model.extra_future_tokens, dim=2)[0]
                 first_token_target = self.last_tokens[:, :-self.conf.model.extra_future_tokens + 1]
                 token_acc = torch.sum((torch.argmax(token_logits_i, dim=-1) == first_token_target.reshape(first_token_target.shape[0], first_token_target.shape[1] * first_token_target.shape[2])).float() * token_padding_mask) / torch.sum(token_padding_mask)
@@ -247,7 +247,7 @@ class LanguageModeling(pl.LightningModule):
         if torch.isnan(total_loss):
             print("nan detected! skip this batch")
             return torch.tensor(0.0, device=self.device, requires_grad=True)
-        self.log("train/loss", total_loss, on_step=True, on_epoch=False, prog_bar=True, logger=True, sync_dist=True)
+        self.log("train/loss", flow_loss_val, on_step=True, on_epoch=False, prog_bar=True, logger=True, sync_dist=True)
         if token_loss is not None:
             self.log("train/token_loss", token_loss, on_step=True, on_epoch=False, prog_bar=True, logger=True, sync_dist=True)
             self.log("train/token_acc", token_acc, on_step=True, on_epoch=False, prog_bar=True, logger=True, sync_dist=True)
@@ -361,7 +361,7 @@ def main():
             save_last=True,
             filename="model-{step:07d}",
         )
-        save_at_specific_step = SaveAtSpecificStep(10000, ckpt_dir=f"{ckpt_dir}/10kxn_ckpt/")
+        save_at_specific_step = SaveAtSpecificStep(args.every_n_steps * 2, ckpt_dir=f"{ckpt_dir}/kxn_ckpt/")
         tb_logger = TensorBoardLogger(save_dir=f"{ckpt_dir}/logs/", version=1)
         tb_logger.log_hyperparams(conf.toDict())
         lr_monitor = LearningRateMonitor(logging_interval="step")
