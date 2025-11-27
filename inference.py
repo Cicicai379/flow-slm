@@ -2,14 +2,13 @@ import argparse
 import csv
 from pathlib import Path
 import tqdm
-
 import lightning.pytorch as pl
 import munch
 import numpy as np
 import torch
 import torchaudio
+import torchaudio.functional as F
 import yaml
-
 from decode import Sampler
 from trainer import LanguageModeling
 from model_utils import reduce_features
@@ -46,7 +45,7 @@ def load_audio_list(root_dir: str, csv_path: str, target_sample_rate: int):
             duration = float(row.get("prompt_length", 0.0))
             waveform, sample_rate = torchaudio.load(str(audio_path))
             if sample_rate != target_sample_rate:
-                waveform = torchaudio.transforms.Resample(sample_rate, target_sample_rate)(waveform)
+                waveform = F.resample(waveform, sample_rate, target_sample_rate)
             prompt_id = row["path"].replace("/", "_").replace(".wav", "").replace(".flac", "")
             data.append((prompt_id, waveform, duration))
 
@@ -59,21 +58,22 @@ class Processor:
         self.conf = conf
         self.device = device
 
-        if getattr(self.conf.model, "norm", None) == "static":
-            self.mean = torch.Tensor(np.load(conf.model.mean_path)).to(self.device)
-            self.std = torch.Tensor(np.load(conf.model.std_path)).to(self.device)
-
         self.frame_rate = 12.5
 
         self.vocoder = None
         self.sample_rate = None
+
+    def load_statistics(self, mean, std):
+        self.mean = mean.to(self.device).to(torch.bfloat16)
+        self.std = std.to(self.device).to(torch.bfloat16)
+        return
 
     def load_ssl_model(self, ssl_model):
         self.ssl_model = ssl_model
         return
 
     def get_ssl_feats(self, wav, duration, duplicate=1):
-        wavs = wav.to(self.device)
+        wavs = wav.to(self.device).to(torch.bfloat16)
         wav_lens = torch.ones(1).to(self.device)
 
         with torch.no_grad():
@@ -94,7 +94,7 @@ class Processor:
 
     def load_vocoder_mimi(self):
         self.vocoder_type = "mimi"
-        self.vocoder = MimiDecoder().cuda()
+        self.vocoder = MimiDecoder().cuda().to(torch.bfloat16)
         self.sample_rate = 24000
         return
 
@@ -154,6 +154,7 @@ def parse_args():
     parser.add_argument("--download_whisper_root", type=str, default=None, help="Root directory to download Whisper models")
     parser.add_argument("--save_transcription", action="store_true")
     parser.add_argument("--num_quantizers", type=int, default=16)
+    parser.add_argument("--sr", type=int, default=24000)
     return parser.parse_args()
 
 
@@ -161,7 +162,6 @@ def load_conf(conf_path):
     with open(conf_path) as f:
         conf = yaml.safe_load(f)
     conf = munch.munchify(conf)
-    conf.model.flash_attention = False
     return conf
 
 
@@ -169,7 +169,9 @@ def load_model(args, conf, device="cuda"):
     model_args = type("Args", (), {})()
     lm = LanguageModeling(model_args, conf)
     state_dict = torch.load(args.ckpt_path, map_location="cpu")
-    lm.load_state_dict(state_dict)
+    if "epoch" in state_dict:
+        state_dict = state_dict["state_dict"]
+    lm.load_state_dict(state_dict, strict=False)
     lm = lm.to(device).to(torch.bfloat16)
     return lm
 
@@ -179,7 +181,8 @@ def prepare_sampler_and_processor(lm, conf, args, device="cuda"):
     sampler = Sampler(lm.gslm_pipeline, lm.loss_fn, frame_rate=frame_rate).to(device)
     processor = Processor(conf, device=device)
     processor.load_vocoder_mimi()
-    processor.load_ssl_model(lm.gslm_pipeline.ssl_model.to(torch.float32))
+    processor.load_ssl_model(lm.gslm_pipeline.ssl_model.to(torch.bfloat16))
+    processor.load_statistics(lm.gslm_pipeline.mean, lm.gslm_pipeline.std)
 
     return sampler, processor
 
@@ -251,7 +254,7 @@ def main():
     # load prompt list if provided
     prompt_wavs = None
     if args.prompt_csv is not None and args.prompt_dir is not None:
-        prompt_wavs = load_audio_list(args.prompt_dir, args.prompt_csv, target_sample_rate=16000)
+        prompt_wavs = load_audio_list(args.prompt_dir, args.prompt_csv, target_sample_rate=args.sr)
 
     if prompt_wavs is None:
         gen_iter = run_unconditional(args, sampler, processor)

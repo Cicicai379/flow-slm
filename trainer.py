@@ -43,7 +43,6 @@ class LanguageModeling(pl.LightningModule):
 
         # build loss_fn (FlowLoss) depending on config
         if self.conf.optimizer.loss_function == "FM":
-            dim = self.conf.model.ssl_dim
             token_conditioning = getattr(self.conf.model, "token_conditioning", False)
             if token_conditioning:
                 token_emb_dim = getattr(self.conf.model, "token_emb_dim", 0)
@@ -52,13 +51,13 @@ class LanguageModeling(pl.LightningModule):
                     extra_future_tokens = getattr(self.conf.model, "extra_future_tokens", 1)
                     z_dim = self.conf.model.decoder_dim + token_emb_dim * extra_future_tokens
                 else:
-                    z_dim = self.conf.model.decoder_dim + token_emb_dim
+                    z_dim = self.conf.model.decoder_dim + token_emb_dim * self.conf.model.reduction_factor
             else:
                 z_dim = self.conf.model.decoder_dim
 
             null_prob = 0.0 if not hasattr(self.conf.optimizer, "null_prob") else self.conf.optimizer.null_prob
             self.loss_fn = FlowLoss(
-                target_dim=dim * self.conf.model.reduction_factor,
+                target_dim=self.conf.model.ssl_dim * self.conf.model.reduction_factor,
                 z_dim=z_dim,
                 net=self.gslm_pipeline.decoder.output_proj,
                 sigma_min=self.conf.optimizer.sigma_min,
@@ -114,7 +113,12 @@ class LanguageModeling(pl.LightningModule):
         }
         return lr_scheduler_config
 
-    def _run_pipeline(self, wavs: torch.Tensor, wav_len: torch.Tensor, eval_mode: bool):
+    def _run_pipeline(
+        self,
+        wavs: torch.Tensor,
+        wav_len: torch.Tensor,
+        eval_mode: bool,
+    ):
         """
         Call the pipeline. If eval_mode is True, temporarily set pipeline.eval()
         and restore previous training flag after call.
@@ -141,7 +145,7 @@ class LanguageModeling(pl.LightningModule):
             return None
 
         # multi-future-token handling
-        if hasattr(self.conf.model, "extra_future_tokens") and self.conf.model.extra_future_tokens > 0:
+        if hasattr(self.conf.model, "extra_future_tokens") and self.conf.model.extra_future_tokens > 1:
             k_future = self.conf.model.extra_future_tokens
             token_losses = token_padding_mask.new_zeros((token_padding_mask.shape[0], token_padding_mask.shape[1])).float()
             token_weight = token_padding_mask.new_zeros((token_padding_mask.shape[0], token_padding_mask.shape[1])).float()
@@ -167,7 +171,7 @@ class LanguageModeling(pl.LightningModule):
 
         return final_token_loss
 
-    def _compute_metrics_and_total(self, flow_loss, padding_mask, token_loss, token_padding_mask):
+    def _compute_metrics_and_total(self, flow_loss, padding_mask, token_loss, token_padding_mask, token_logits, tokens):
         flow_loss_val = torch.sum(flow_loss * padding_mask) / (torch.sum(padding_mask) * self.conf.model.reduction_factor * self.conf.model.ssl_dim)
         if token_loss is not None:
             token_loss_val = torch.sum(token_loss * token_padding_mask) / torch.sum(token_padding_mask)
@@ -183,11 +187,11 @@ class LanguageModeling(pl.LightningModule):
         if token_loss_val is not None:
             # monitor first future token when available
             if hasattr(self.conf.model, "extra_future_tokens") and self.conf.model.extra_future_tokens > 1:
-                token_logits_i = torch.chunk(self.last_token_logits, self.conf.model.extra_future_tokens, dim=2)[0]
-                first_token_target = self.last_tokens[:, :-self.conf.model.extra_future_tokens + 1]
+                token_logits_i = torch.chunk(token_logits, self.conf.model.extra_future_tokens, dim=2)[0]
+                first_token_target = tokens[:, :-self.conf.model.extra_future_tokens + 1]
                 token_acc = torch.sum((torch.argmax(token_logits_i, dim=-1) == first_token_target.reshape(first_token_target.shape[0], first_token_target.shape[1] * first_token_target.shape[2])).float() * token_padding_mask) / torch.sum(token_padding_mask)
             else:
-                token_acc = torch.sum((torch.argmax(self.last_token_logits, dim=-1) == self.last_tokens.reshape(self.last_tokens.shape[0], self.last_tokens.shape[1] * self.last_tokens.shape[2])).float() * token_padding_mask) / torch.sum(token_padding_mask)
+                token_acc = torch.sum((torch.argmax(token_logits, dim=-1) == tokens.reshape(tokens.shape[0], tokens.shape[1] * tokens.shape[2])).float() * token_padding_mask) / torch.sum(token_padding_mask)
         else:
             token_acc = None
 
@@ -201,16 +205,18 @@ class LanguageModeling(pl.LightningModule):
         eval_mode = not self.training
         logits, ssl_feats, padding_mask, token_logits, tokens, token_padding_mask = self._run_pipeline(wavs, wav_len, eval_mode)
 
-        # store last token values for metric computation
-        self.last_token_logits = token_logits
-        self.last_tokens = tokens
 
         flow_loss = self._compute_flow_loss(logits, ssl_feats)
         token_loss = self._compute_token_loss(token_logits, tokens, token_padding_mask, self.training)
 
         if reduction == "token":
             total_loss, flow_loss_val, token_loss_val, token_acc = self._compute_metrics_and_total(
-                flow_loss, padding_mask, token_loss, token_padding_mask
+                flow_loss,
+                padding_mask,
+                token_loss,
+                token_padding_mask,
+                token_logits,
+                tokens,
             )
             return total_loss, flow_loss_val, token_loss_val, token_acc
         
@@ -247,7 +253,7 @@ class LanguageModeling(pl.LightningModule):
         if torch.isnan(total_loss):
             print("nan detected! skip this batch")
             return torch.tensor(0.0, device=self.device, requires_grad=True)
-        self.log("train/loss", flow_loss_val, on_step=True, on_epoch=False, prog_bar=True, logger=True, sync_dist=True)
+        self.log("train/flow_loss", flow_loss_val, on_step=True, on_epoch=False, prog_bar=True, logger=True, sync_dist=True)
         if token_loss is not None:
             self.log("train/token_loss", token_loss, on_step=True, on_epoch=False, prog_bar=True, logger=True, sync_dist=True)
             self.log("train/token_acc", token_acc, on_step=True, on_epoch=False, prog_bar=True, logger=True, sync_dist=True)
@@ -256,7 +262,7 @@ class LanguageModeling(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         total_loss, flow_loss_val, token_loss, token_acc = self.forward(batch)
-        self.log("valid/loss", flow_loss_val, on_step=False, on_epoch=True, prog_bar=True, logger=True, sync_dist=True)
+        self.log("valid/flow_loss", flow_loss_val, on_step=False, on_epoch=True, prog_bar=True, logger=True, sync_dist=True)
         if token_loss is not None:
             self.log("valid/token_loss", token_loss, on_step=False, on_epoch=True, prog_bar=True, logger=True, sync_dist=True)
             self.log("valid/token_acc", token_acc, on_step=False, on_epoch=True, prog_bar=True, logger=True, sync_dist=True)
@@ -274,11 +280,12 @@ class LanguageModeling(pl.LightningModule):
 
     def test_step(self, batch, batch_idx):
         total_loss, flow_loss_val, token_loss, token_acc = self.forward(batch, reduction="token")
-        self.log("test/loss", flow_loss_val, on_step=False, on_epoch=True, prog_bar=True, logger=True, sync_dist=True)
+        self.log("test/flow_loss", flow_loss_val, on_step=False, on_epoch=True, prog_bar=True, logger=True, sync_dist=True)
         if token_loss is not None:
             self.log("test/token_loss", token_loss, on_step=False, on_epoch=True, prog_bar=True, logger=True, sync_dist=True)
             self.log("test/token_acc", token_acc, on_step=False, on_epoch=True, prog_bar=True, logger=True, sync_dist=True)
         return total_loss, token_loss, token_acc
+
 def main():
     parser = argparse.ArgumentParser(description="")
     parser.add_argument("--data_dir", help="Path to dataset folder", default=None)
@@ -431,6 +438,9 @@ if __name__ == "__main__":
     print("cuda_available()", torch.cuda.is_available())
     print("cuda_device_count()", torch.cuda.device_count())
     print("torch.cuda.is_bf16_supported()", torch.cuda.is_bf16_supported())
+    print("flash_sdp_enabled()", torch.backends.cuda.flash_sdp_enabled())
+    print("mem_efficient_sdp_enabled()", torch.backends.cuda.mem_efficient_sdp_enabled())
+    print("math_sdp_enabled()", torch.backends.cuda.math_sdp_enabled())
     if torch.cuda.is_bf16_supported():
         torch.set_float32_matmul_precision("medium")
     main()

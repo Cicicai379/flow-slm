@@ -2,6 +2,7 @@ from torch.utils.data import Dataset, DataLoader
 import lightning.pytorch as pl
 from datasets import concatenate_datasets
 import torchaudio
+import torchaudio.functional as F
 import os
 from datasets import load_dataset
 from utils import batch_pad_right
@@ -73,14 +74,15 @@ class HFListDataset(Dataset):
     Returns tuples: (id, torch.Tensor(wav))
     """
 
-    def __init__(self, kind: str = "mls", size: str = "full", pad_audio: bool = False,
-                 reduction: int = 4, sort: bool = False, split: str = "train",
+    def __init__(self, kind: str = "mls", size: str = "full", 
+                 sort: bool = False, split: str = "train", sr=24000,
                  vad: bool = False):
         super().__init__()
         self.kind = kind
         self.vad = vad
         self.sort = sort
         self.split = split
+        self.sr = sr
 
         if kind == "people":
             datasets = [load_dataset("MLCommons/peoples_speech", subset, split=split)
@@ -100,7 +102,7 @@ class HFListDataset(Dataset):
                 self.dataset = self.dataset.sort("audio_duration")
 
         if self.vad:
-            self.vad_transform = torchaudio.transforms.Vad(sample_rate=16000)
+            self.vad_transform = torchaudio.transforms.Vad(sample_rate=self.sr)
 
 
     def __len__(self):
@@ -109,7 +111,7 @@ class HFListDataset(Dataset):
     def _apply_vad(self, wav: torch.Tensor) -> torch.Tensor:
         if not self.vad:
             return wav
-        if wav.shape[0] <= 16000:
+        if wav.shape[0] <= self.sr:
             return wav
 
         trimmed = self.vad_transform(wav)
@@ -125,6 +127,7 @@ class HFListDataset(Dataset):
     def __getitem__(self, index: int) -> Tuple[str, torch.Tensor]:
         row = self.dataset[index]
         wav = torch.tensor(row["audio"]["array"], dtype=torch.float32)
+        wav = F.resample(wav, row["audio"]["sampling_rate"], self.sr)
 
         wav = self._apply_vad(wav)
 
@@ -141,7 +144,7 @@ class SpeechDataset(Dataset):
     Expects files in data_dir with names <id>.<ext>.
     """
 
-    def __init__(self, id_file: str, data_dir: str, default_sr: int = 16000,
+    def __init__(self, id_file: str, data_dir: str, default_sr: int = 24000,
                  ext: str = "wav"):
         self.default_sr = default_sr
         self.data_dir = data_dir
@@ -161,7 +164,7 @@ class SpeechDataset(Dataset):
         if wav.dim() == 2:
             wav = wav[0]
         if sr != self.default_sr:
-            wav = torchaudio.functional.resample(wav, sr, self.default_sr)
+            wav = F.resample(wav, sr, self.default_sr)
         return uid, wav
 
 

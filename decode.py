@@ -101,11 +101,11 @@ class Sampler(torch.nn.Module):
 
         for step in range(start_step, max_infer_steps):
             padding_mask = prev_tokens.new_ones((batch_size, prev_tokens.shape[1]))
-            logits, aux_output = self.gslm_pipeline.decoder(prev_tokens, padding_mask)
+            logits, aux_output = self.gslm_pipeline.decoder(prev_tokens, attention_mask=padding_mask)
 
             # handle extra_future_tokens -> split aux_output into chunks if configured
-            if getattr(self.conf.model, "extra_future_tokens", 0) > 0:
-                aux_output_chunk = torch.chunk(aux_output, self.conf.model.extra_future_tokens, dim=2)
+            chunk_size = 1 if self.conf.model.extra_future_tokens <= 1 else self.conf.model.extra_future_tokens
+            aux_output_chunk = torch.chunk(aux_output, chunk_size, dim=2)
 
             tokens = None
             # If an explicit aux eos token is provided and future_conditioning is off, sample from the next semantic token 

@@ -33,7 +33,7 @@ optimizer:
   percentile_clipping: 60
 
 data:
-    sr: 16000
+    sr: 24000
     ext: flac
     vad: True
 
