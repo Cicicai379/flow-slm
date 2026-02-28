@@ -5,7 +5,7 @@ the training, validation, and prediction steps for the continuous GSLM model.
 Refactored to split responsibilities into smaller helper methods, fix a couple
 of mode/device issues, and improve readability.
 """
-
+# from lightning.pytorch.plugins.environments import LightningEnvironment #!!!!!
 import torch
 import torch.nn.functional as F
 import lightning.pytorch as pl
@@ -25,6 +25,7 @@ from utils import replace_values, writing_output_to_file, SaveAtSpecificStep, se
 from lightning.pytorch.plugins.environments import SLURMEnvironment
 from dataset import SpeechDataModule
 
+
 class LanguageModeling(pl.LightningModule):
     """Main training class for continuous GSLM.
     
@@ -40,7 +41,7 @@ class LanguageModeling(pl.LightningModule):
         self.save_hyperparameters(conf_dict)
 
         self.gslm_pipeline = GSLMPipeline(conf, args)
-
+       
         # build loss_fn (FlowLoss) depending on config
         if self.conf.optimizer.loss_function == "FM":
             token_conditioning = getattr(self.conf.model, "token_conditioning", False)
@@ -116,7 +117,7 @@ class LanguageModeling(pl.LightningModule):
     def _run_pipeline(
         self,
         wavs: torch.Tensor,
-        wav_len: torch.Tensor,
+        abs_len: torch.Tensor,  # <-- now explicitly decoder lengths
         eval_mode: bool,
     ):
         """
@@ -127,13 +128,12 @@ class LanguageModeling(pl.LightningModule):
             was_training = self.gslm_pipeline.training
             self.gslm_pipeline.eval()
             with torch.no_grad():
-                out = self.gslm_pipeline(wavs, wav_len)
+                out = self.gslm_pipeline(wavs, abs_len)
             if was_training:
                 self.gslm_pipeline.train()
             return out
         else:
-            return self.gslm_pipeline(wavs, wav_len)
-
+            return self.gslm_pipeline(wavs, abs_len)
     def _compute_flow_loss(self, logits, ssl_feats):
         """Compute flow loss or return zeros if disabled."""
         if getattr(self.conf.optimizer, "loss_weight", 1.0) > 0:
@@ -199,14 +199,62 @@ class LanguageModeling(pl.LightningModule):
 
     def forward(self, batch, reduction='token'):
         ids, wavs, wav_len = batch
-        wav_len = wav_len.float()
+
+        # wav_len = wav_len.float()
+        print("=== RAW wav_len ===")
+        print(wav_len)
+        print("dtype:", wav_len.dtype)
+        print("min:", wav_len.min().item())
+        print("max:", wav_len.max().item())
+        print("unique:", torch.unique(wav_len))
+        print("===================")
+        wav_len = wav_len.float()   
 
         # run pipeline (use eval mode for non-training forward)
         eval_mode = not self.training
         logits, ssl_feats, padding_mask, token_logits, tokens, token_padding_mask = self._run_pipeline(wavs, wav_len, eval_mode)
+        print("logits.shape:", logits.shape)
 
+        # 🔥 FIX: padding_mask is 3D, but loss expects 2D
+        if padding_mask is not None and padding_mask.dim() == 3:
+            padding_mask = padding_mask.squeeze(-1)
+        if padding_mask is not None:
+            print("padding_mask.shape:", padding_mask.shape)
+
+        logits, ssl_feats, padding_mask, token_logits, tokens, token_padding_mask = self._run_pipeline(wavs, wav_len, eval_mode)
+
+
+        # # Run pipeline (use eval mode for non-training forward)
+        # eval_mode = not self.training
+        # logits, ssl_feats, padding_mask, token_logits, tokens, token_padding_mask = self._run_pipeline(
+        #     wavs, abs_len, eval_mode
+        # )
+        
+        if torch.isnan(logits).any():
+            print("\n--- [DEBUG] NaN Detected in Logits ---")
+            print(f"SSL Feats NaN? {torch.isnan(ssl_feats).any()}")
+            print(f"SSL Feats stats: min={ssl_feats.min()}, max={ssl_feats.max()}")
+            
+            if not torch.isnan(ssl_feats).any():
+                print("Conclusion: SSL Encoder is FINE. The Decoder/Output projection is blowing up.")
+            else:
+                print("Conclusion: The SSL Encoder/Pipeline itself is producing NaNs.")
+            
+            raise RuntimeError("NaN in logits")
+
+
+        # if torch.isnan(ssl_feats).any():
+        #     print("SSL_FEATS CONTAIN NAN")
+        #     raise RuntimeError("NaN in ssl_feats")
 
         flow_loss = self._compute_flow_loss(logits, ssl_feats)
+
+        # if torch.isnan(flow_loss).any():
+        #     print("FLOW LOSS BECAME NAN")
+        #     print("logits stats:", logits.min().item(), logits.max().item())
+        #     print("ssl stats:", ssl_feats.min().item(), ssl_feats.max().item())
+        #     raise RuntimeError("Flow loss NaN")
+        
         token_loss = self._compute_token_loss(token_logits, tokens, token_padding_mask, self.training)
 
         if reduction == "token":
@@ -250,9 +298,10 @@ class LanguageModeling(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         total_loss, flow_loss_val, token_loss, token_acc = self.forward(batch)
         current_lr = self.optimizers().param_groups[0]["lr"]
-        if torch.isnan(total_loss):
-            print("nan detected! skip this batch")
-            return torch.tensor(0.0, device=self.device, requires_grad=True)
+        # if torch.isnan(total_loss):
+        #     print("nan detected! skip this batch")
+        #     return torch.tensor(0.0, device=self.device, requires_grad=True)
+       
         self.log("train/flow_loss", flow_loss_val, on_step=True, on_epoch=False, prog_bar=True, logger=True, sync_dist=True)
         if token_loss is not None:
             self.log("train/token_loss", token_loss, on_step=True, on_epoch=False, prog_bar=True, logger=True, sync_dist=True)
@@ -359,6 +408,28 @@ def main():
                         state_dict.pop(k, None)
                 language_modeling.load_state_dict(state_dict, strict=False)
 
+        # FORCE ALL PARAMETERS TO FP32
+        for p in language_modeling.parameters():
+            p.data = p.data.float()
+
+        for b in language_modeling.buffers():
+            b.data = b.data.float()
+
+        print("Checking weights for NaNs...")
+        nan_params = []
+        for name, param in language_modeling.named_parameters():
+            if torch.isnan(param).any():
+                nan_params.append(name)
+        
+        if nan_params:
+            print(f"!!! CRITICAL: {len(nan_params)} parameters contain NaN before training !!!")
+            for p_name in nan_params[:5]:  # Print first 5 offenders
+                print(f"  - {p_name}")
+            raise RuntimeError("Cannot start training: Model weights contain NaNs.")
+        else:
+            print("Weights are clean. Proceeding to training.")
+
+
         checkpoint_callback = ModelCheckpoint(
             save_top_k=5,
             monitor="step",
@@ -372,7 +443,8 @@ def main():
         tb_logger = TensorBoardLogger(save_dir=f"{ckpt_dir}/logs/", version=1)
         tb_logger.log_hyperparams(conf.toDict())
         lr_monitor = LearningRateMonitor(logging_interval="step")
-        precision = "bf16-mixed" if torch.cuda.is_bf16_supported() else 32
+        # precision = "bf16-mixed" if torch.cuda.is_bf16_supported() else 32
+        precision = 32
         trainer = pl.Trainer(
             accelerator="gpu",
             max_steps=conf.training.max_steps,
@@ -381,13 +453,17 @@ def main():
             check_val_every_n_epoch=None,
             logger=tb_logger,
             precision=precision,
-            devices="auto",
-            strategy=args.strategy,
+            # devices="auto",
+            # strategy=args.strategy,
+            strategy="auto",
+            devices=1,
             log_every_n_steps=args.every_n_steps,
             accumulate_grad_batches=conf.training.accumulate_grad_batches,
             plugins=[SLURMEnvironment(requeue_signal=signal.SIGHUP)],
+
             default_root_dir=ckpt_dir,
             use_distributed_sampler=True,
+
         )
     else:
         # evaluation / prediction only
@@ -403,7 +479,8 @@ def main():
         except Exception:
             language_modeling.load_state_dict(state_dict, strict=False)
         language_modeling.eval()
-        precision = "bf16-mixed" if torch.cuda.is_bf16_supported() else 32
+        # precision = "bf16-mixed" if torch.cuda.is_bf16_supported() else 32
+        precision = 32
         ckpt_dir = os.path.dirname(args.ckpt_path)
         trainer = pl.Trainer(
             accelerator="gpu",
@@ -441,6 +518,13 @@ if __name__ == "__main__":
     print("flash_sdp_enabled()", torch.backends.cuda.flash_sdp_enabled())
     print("mem_efficient_sdp_enabled()", torch.backends.cuda.mem_efficient_sdp_enabled())
     print("math_sdp_enabled()", torch.backends.cuda.math_sdp_enabled())
+
+    torch.autograd.set_detect_anomaly(True)
+
+    torch.backends.cuda.enable_flash_sdp(False)
+    torch.backends.cuda.enable_mem_efficient_sdp(False)
+    torch.backends.cuda.enable_math_sdp(True)
+
     if torch.cuda.is_bf16_supported():
         torch.set_float32_matmul_precision("medium")
     main()

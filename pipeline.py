@@ -24,8 +24,10 @@ class GSLMPipeline(nn.Module):
         else:
             raise NotImplementedError(f"Decoder model {self.conf.model.decoder} not supported.")
 
-        attn_implementation = "flash_attention_2" if self.conf.model.flash_attention else "eager"
-        dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() or attn_implementation == 'flash_attention_2' else torch.float32
+        attn_implementation = "eager"
+        # dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() or attn_implementation == 'flash_attention_2' else torch.float32
+        dtype = torch.float32
+        
         decoder_model = AutoModelForCausalLM.from_pretrained(
             model_name,
             torch_dtype=dtype,
@@ -103,7 +105,7 @@ class GSLMPipeline(nn.Module):
                     token_emb_dim=self.token_emb_dim,
                 )
             # use self._lm for config access
-            self.pad_index = decoder_model.config.pad_token_id
+            self.pad_index = getattr(decoder_model.config, "pad_token_id", decoder_model.config.bos_token_id) #!!!!
             self.bos_index = decoder_model.config.bos_token_id
             self.eos_index = decoder_model.config.eos_token_id
 

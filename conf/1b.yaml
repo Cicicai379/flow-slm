@@ -19,7 +19,7 @@ model:
   extra_future_tokens: 4 
 
 optimizer:
-  name: AdamW8bit
+  name: AdamW
   lr: 0.0005
   loss_function: FM
   betas: [0.9, 0.98]
@@ -28,7 +28,7 @@ optimizer:
   null_prob: 0.05
   loss_weight: 1.0
   token_loss_weight: 1.0
-  sigma_min: 1.0E-5
+  sigma_min: 0.002
   t_dist: logit_normal
   percentile_clipping: 60
 
