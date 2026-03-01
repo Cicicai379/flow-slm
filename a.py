@@ -1,6 +1,8 @@
 import traceback,re
 from transformers import AutoModelForCausalLM
 from pathlib import Path
+import transformers.models.mimi.modeling_mimi as mm
+
 
 def check_openelm_error():
     try:
@@ -16,4 +18,23 @@ def check_openelm_error():
     if model:
         print("Success.")
 
+def check_mimi_error():
+    p = Path(mm.__file__)
+    text = p.read_text()
+    target = '''"""Tiny wrapper around torch.nn.functional.pad, just to allow for reflect padding on small input.
+        If this is the case, we insert extra 0 padding to the right before the reflection happens.
+        """'''
+    insert_line = '\n        paddings = tuple(int(p) for p in paddings)  # !!! patch'
+
+    if insert_line.strip() in text:
+        return
+    if target not in text:
+        print("Docstring not found. Exact match failed.")
+        return
+
+    new_text = text.replace(target, target + insert_line)
+    p.write_text(new_text)
+    print("Patch applied.")
+
 check_openelm_error()
+check_mimi_error()
