@@ -1,4 +1,23 @@
-# flow-slm
+
+## Training
+
+First fix the Cannot copy out of meta tensor; no data! issue by running
+```bash
+python a.py
+```
+Note this fix is for config 270M.
+
+```bash
+python trainer.py \
+        --conf conf/270m.yaml \
+        --save_path /data/cicicai/flow_slm/checkpoints/test_run \
+        --override "{'optimizer': {'lr': 1e-5, 'loss_function': 'FM'}, 'training': {'batch_size': 8}}" \
+        --hf_training_data --training_data "MLSEn+people" \
+        --strategy "deepspeed_stage_3"```
+
+
+
+# flow-slm (official instruction)
 
 This repository contains code to train and run inference with the Flow-SLMs.
 
