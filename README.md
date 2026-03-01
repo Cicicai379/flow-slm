@@ -3,7 +3,7 @@
 
 First fix the Cannot copy out of meta tensor; no data! issue by running
 ```bash
-python a.py
+python patch.py
 ```
 Note this fix is for config 270M.
 
