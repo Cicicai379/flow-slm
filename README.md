@@ -13,7 +13,8 @@ python trainer.py \
         --save_path /data/cicicai/flow_slm/checkpoints/test_run \
         --override "{'optimizer': {'lr': 1e-5, 'loss_function': 'FM'}, 'training': {'batch_size': 8}}" \
         --hf_training_data --training_data "MLSEn+people" \
-        --strategy "deepspeed_stage_3"```
+        --strategy "deepspeed_stage_3"
+```
 
 
 
