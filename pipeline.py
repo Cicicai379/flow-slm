@@ -31,7 +31,7 @@ class GSLMPipeline(nn.Module):
         decoder_model = AutoModelForCausalLM.from_pretrained(
             model_name,
             torch_dtype=dtype,
-            trust_remote_code=True
+            trust_remote_code=True,
         )
 
         # Initialize normalization (moved to helper)
