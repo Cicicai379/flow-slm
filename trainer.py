@@ -221,9 +221,6 @@ class LanguageModeling(pl.LightningModule):
         if padding_mask is not None:
             print("padding_mask.shape:", padding_mask.shape)
 
-        logits, ssl_feats, padding_mask, token_logits, tokens, token_padding_mask = self._run_pipeline(wavs, wav_len, eval_mode)
-
-
         # # Run pipeline (use eval mode for non-training forward)
         # eval_mode = not self.training
         # logits, ssl_feats, padding_mask, token_logits, tokens, token_padding_mask = self._run_pipeline(
