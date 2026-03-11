@@ -16,6 +16,11 @@ python trainer.py \
         --strategy "deepspeed_stage_3"
 ```
 
+NaN issue in decoder logits:
+The issue was that inv_freq for the rotary positional embeddings was being initialized statically during model construction, which placed it on the wrong device and caused numerical instability when multiplied by large token indices in RoPE computations. The fix was to lazily initialize inv_freq on demand inside _get_inv_freq, ensuring it is always created on the correct device and in full precision, and to compute the sine and cosine caches only when needed with the correct device and dtype. This prevents extreme or NaN values and ensures stable, numerically safe RoPE calculations.
+
+Patch for /data/cicicai/huggingface/modules/transformers_modules/apple/OpenELM_hyphen_270M/e2b9003235d55a404567faf06e74883081c65e65/modeling_openelm.py:
+https://drive.google.com/file/d/159VbcXNT0rzjxf2ZVky3PBDY7yhG2_2L/view?usp=sharing
 
 
 # flow-slm (official instruction)
