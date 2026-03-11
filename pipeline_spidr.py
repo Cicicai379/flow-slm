@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 from utils import length_to_mask
-from model import MimiEncoder, ELMDecoderWrapper
+from model import MimiEncoder, ELMDecoderWrapper,SPIDREncoder
 from model_utils import reduce_features, split_features
 from transformers import AutoModelForCausalLM
 
@@ -14,9 +14,12 @@ class GSLMPipeline(nn.Module):
         self.conf = conf
         self.args = args
         
-        if hasattr(self.conf.model, "ssl_model") and self.conf.model.ssl_model == "mimi":
-            n_quantizers = getattr(self.conf.model, "n_quantizers", 0)
-            self.ssl_model = MimiEncoder(freeze=self.conf.model.freeze, n_quantizers=n_quantizers)
+
+        self.ssl_model = SPIDREncoder(
+            conf=self.conf,
+            freeze=self.conf.model.freeze
+        )
+
 
         # Initialize decoder model
         if "OpenELM" in self.conf.model.decoder:
@@ -43,6 +46,7 @@ class GSLMPipeline(nn.Module):
     @property
     def _decoder_model(self):
         return self.decoder.lm
+    
 
     def _init_normalization(self):
         """Load and register static normalization buffers if configured.
@@ -91,7 +95,7 @@ class GSLMPipeline(nn.Module):
             self._n_res_blocks = self.conf.model.n_res_blocks
             self.aux_output_layer_idx = None if not hasattr(self.conf.model, "aux_output_layer_idx") else self.conf.model.aux_output_layer_idx
 
-            if hasattr(self.conf.model, "ssl_model") and self.conf.model.ssl_model == "mimi":
+            if hasattr(self.conf.model, "ssl_model"):
                 self.decoder = ELMDecoderWrapper(
                     decoder_model,
                     input_dim=self.input_dim,
@@ -138,8 +142,12 @@ class GSLMPipeline(nn.Module):
 
     def _get_ssl_feats(self, wavs, wav_len):
         with torch.no_grad():
-            if self.conf.model.ssl_model == "mimi" and hasattr(self.conf.model, "n_quantizers") and self.conf.model.n_quantizers > 0:
+            if self.conf.model.ssl_model == "mimi":
                 ssl_feats, tokens = self.ssl_model(wavs, wav_len)
+
+            elif self.conf.model.ssl_model == "spidr":
+                ssl_feats, tokens = self.ssl_model(wavs, wav_len)
+
             else:
                 raise NotImplementedError(f"SSL model {self.conf.model.ssl_model} not supported.")
 

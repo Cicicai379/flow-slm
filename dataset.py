@@ -9,19 +9,46 @@ from utils import batch_pad_right
 import random
 import torch
 from typing import Optional, Tuple, List, Sequence
+import glob
+import tarfile
+import io
 
 random.seed(0)
 
+def expand_emilia_path(path_pattern):
+    """Convert brace {000000..001134} into a list of tar files."""
+    m = re.search(r"\{(\d+)\.\.(\d+)\}", path_pattern)
+    if not m:
+        return sorted(glob.glob(path_pattern))
+    start, end = int(m.group(1)), int(m.group(2))
+    prefix, suffix = path_pattern.split("{")[0], path_pattern.split("}")[1]
+    return [f"{prefix}{i:06d}{suffix}" for i in range(start, end + 1)]
+    
 class SpeechDataModule(pl.LightningDataModule):
     def __init__(self, args, conf):
         super().__init__()
         self.args = args
         self.conf = conf
 
+
     def setup(self, stage: Optional[str] = None):
         if stage == "fit":
             print("set up datasets...")
             print(f"using {self.args.training_data} training data")
+
+            if self.args.training_data == "emilia":
+                all_shards = sorted(glob.glob("/data/chrispark/datasets/emilia/Emilia-YODAS/EN/EN-B*.tar"))
+                print("Total shards found:", len(all_shards))
+
+                train_files = all_shards[:-5]
+                val_files   = all_shards[-5:]
+
+                print("Train shards:", len(train_files))
+                print("Val shards:", len(val_files))
+
+                self.train_set = EmiliaDataset(train_files, sr=self.conf.data.sr)
+                self.val_set   = EmiliaDataset(val_files, sr=self.conf.data.sr)
+                return
 
             if self.args.training_data == "MLSEn10k":
                 size = "10k"
@@ -168,6 +195,76 @@ class SpeechDataset(Dataset):
         return uid, wav
 
 
+from tqdm import tqdm
+import tarfile
+import glob
+import io
+import torchaudio
+import torchaudio.functional as F
+from torch.utils.data import Dataset
+
+class EmiliaDataset(Dataset):
+    """
+    Dataset for EMILIA tar shards.
+    Each tar contains many audio files.
+    """
+
+    def __init__(self, tar_pattern, sr=24000, vad=False, verbose=True):
+        super().__init__()
+
+        self.sr = sr
+        self.vad = vad
+        self.verbose = verbose
+
+        # Handle tar_pattern being a list or string
+        if isinstance(tar_pattern, str):
+            self.tar_files = sorted(glob.glob(tar_pattern))
+        elif isinstance(tar_pattern, list):
+            self.tar_files = sorted(tar_pattern)
+        else:
+            raise TypeError(f"tar_pattern must be str or list, got {type(tar_pattern)}")
+
+        self.index = []
+
+        # Build index with progress logging
+        if self.verbose:
+            print(f"Indexing {len(self.tar_files)} tar files...")
+
+        for i, tar_path in enumerate(tqdm(self.tar_files, desc="Scanning tars", unit="tar")):
+            with tarfile.open(tar_path) as tar:
+                for member in tar.getmembers():
+                    if member.name.endswith(".wav") or member.name.endswith(".flac"):
+                        self.index.append((tar_path, member.name))
+
+        if self.verbose:
+            print(f"Indexed {len(self.index)} audio files from {len(self.tar_files)} tars.")
+
+        # Optional VAD transform
+        if self.vad:
+            self.vad_transform = torchaudio.transforms.Vad(sample_rate=sr)
+
+    def __len__(self):
+        return len(self.index)
+
+    def __getitem__(self, idx):
+        tar_path, member_name = self.index[idx]
+
+        with tarfile.open(tar_path) as tar:
+            file_obj = tar.extractfile(member_name)
+            wav, sr = torchaudio.load(io.BytesIO(file_obj.read()))
+
+        if wav.dim() == 2:
+            wav = wav[0]
+
+        if sr != self.sr:
+            wav = F.resample(wav, sr, self.sr)
+
+        if self.vad:
+            wav = self.vad_transform(wav)
+
+        uid = member_name.replace("/", "_")
+        return uid, wav
+        
 class Collator:
     def __init__(self):
         pass

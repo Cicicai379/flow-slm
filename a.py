@@ -18,6 +18,7 @@ def check_openelm_error():
     if model:
         print("Success.")
 
+
 def check_mimi_error():
     p = Path(mm.__file__)
     text = p.read_text()

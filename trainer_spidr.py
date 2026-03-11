@@ -10,7 +10,7 @@ import torch
 import torch.nn.functional as F
 import lightning.pytorch as pl
 from utils import get_cosine_schedule_with_warmup
-from pipeline import GSLMPipeline
+from pipeline_spidr import GSLMPipeline
 from losses import FlowLoss
 import argparse
 import os
@@ -327,7 +327,7 @@ def main():
     parser.add_argument("--hf_training_data", action="store_true")
     parser.add_argument("--validation_only", action="store_true")
     parser.add_argument("--predict_only", action="store_true")
-    parser.add_argument("--training_data", choices=["MLSEn10k", "MLSEn", "MLSEn+people", "emilia"], default=None)
+    parser.add_argument("--training_data", choices=["MLSEn10k", "MLSEn", "MLSEn+people"], default=None)
     parser.add_argument("--valid_id_file", help="Path to validation dataset ids")
     parser.add_argument("--predict_id_file", help="Path to prediction dataset ids")
     parser.add_argument("--prediction_output_dir", help="prediction file path to save")
@@ -400,9 +400,9 @@ def main():
             save_last=True,
             filename="model-{step:07d}",
         )
-        save_at_specific_step = SaveAtSpecificStep(args.every_n_steps * 2, ckpt_dir=f"{ckpt_dir}/kxn_ckpt/")
-        tb_logger = TensorBoardLogger(save_dir=f"{ckpt_dir}/logs/", version=4)
-        print("TensorBoard logs will be written to:", f"{ckpt_dir}/logs/version_4")
+        save_at_specific_step = SaveAtSpecificStep(args.every_n_steps * 2, ckpt_dir=f"{ckpt_dir}/kxn_ckpt_spidr/")
+        tb_logger = TensorBoardLogger(save_dir=f"{ckpt_dir}/logs_spidr/", version=4)
+        print("TensorBoard logs will be written to:", f"{ckpt_dir}/logs_spidr/version_4")
         tb_logger.log_hyperparams(conf.toDict())
         lr_monitor = LearningRateMonitor(logging_interval="step")
         precision = "bf16-mixed" if torch.cuda.is_bf16_supported() else 32
