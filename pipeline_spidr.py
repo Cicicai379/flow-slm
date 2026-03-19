@@ -12,14 +12,14 @@ class GSLMPipeline(nn.Module):
     def __init__(self, conf, args):
         super().__init__()
         self.conf = conf
-        self.args = args
+        self.args = args 
         
-
-        self.ssl_model = SPIDREncoder(
-            conf=self.conf,
-            freeze=self.conf.model.freeze
+        self.ssl_model = MimiEncoder(
+            freeze=self.conf.model.freeze,
+            n_quantizers=getattr(self.conf.model, "n_quantizers", 0),
         )
-
+        self.spidr_model = SPIDREncoder(conf, freeze=True)
+    
 
         # Initialize decoder model
         if "OpenELM" in self.conf.model.decoder:
@@ -74,7 +74,8 @@ class GSLMPipeline(nn.Module):
         # Initialize auxiliary output dimensions for token prediction
         if self.conf.model.ssl_model == "mimi" and self.conf.optimizer.token_loss_weight > 0:
             n_special_tokens = getattr(self.conf.model, "n_special_tokens", 0)
-            self.aux_output_dim = self.ssl_model.model.config.codebook_size + n_special_tokens
+            self.aux_output_dim = self.spidr_model.model.config.codebook_size + n_special_tokens
+
             # hardcoded: use the last index as eos token
             self.eos_token_index = self.aux_output_dim - 1
             if hasattr(self.conf.model, "extra_future_tokens") and self.conf.model.extra_future_tokens > 0:
@@ -142,14 +143,20 @@ class GSLMPipeline(nn.Module):
 
     def _get_ssl_feats(self, wavs, wav_len):
         with torch.no_grad():
-            if self.conf.model.ssl_model == "mimi":
-                ssl_feats, tokens = self.ssl_model(wavs, wav_len)
+            ssl_feats, _ = self.ssl_model(wavs, wav_len)
 
-            elif self.conf.model.ssl_model == "spidr":
-                ssl_feats, tokens = self.ssl_model(wavs, wav_len)
-
-            else:
-                raise NotImplementedError(f"SSL model {self.conf.model.ssl_model} not supported.")
+            # NEW: SPIDR tokens
+            _, tokens = self.spidr_model(wavs, wav_len)
+            T_mimi = ssl_feats.shape[1]
+            T_spidr = tokens.shape[1]
+            if T_spidr != T_mimi:
+                ratio = T_spidr // T_mimi
+                tokens = tokens[:, :T_mimi * ratio]
+                tokens = tokens.reshape(tokens.shape[0], T_mimi, ratio)
+                tokens = tokens[:, :, 0]
+                tokens = tokens.unsqueeze(-1)
+            # print("Mimi frames:", ssl_feats.shape[1])
+            # print("SPIDR frames:", tokens.shape[1])
 
             ssl_abs_len = torch.round(wav_len * ssl_feats.shape[1]).long()
             #ssl_padding_mask = ~length_to_mask(ssl_abs_len, dtype=torch.bool)

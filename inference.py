@@ -85,23 +85,10 @@ class Processor:
             if getattr(self.conf.model, "norm", None) == "static":
                 feats = (feats - self.mean) / self.std
 
-
-            print("===== SSL RAW FEATS =====")
-            print("shape:", feats.shape)
-            print("mean:", feats.mean().item())
-            print("std:", feats.std().item())
-            print("min/max:", feats.min().item(), feats.max().item())
-
             feats = feats[:, :int(duration * self.frame_rate)]
 
             reduced_feats = reduce_features(feats, self.conf.model.reduction_factor)
             reduced_feats = reduced_feats.repeat(duplicate, 1, 1)
-
-            print("===== REDUCED FEATS =====")
-            print("shape:", reduced_feats.shape)
-            print("mean:", reduced_feats.mean().item())
-            print("std:", reduced_feats.std().item())
-                        
 
             return reduced_feats
 
@@ -112,11 +99,6 @@ class Processor:
         return
 
     def batch_vocoding(self, samples, stop_steps=None, num_quantizers=None):
-        print("===== VOCODER INPUT =====")
-        print("LATENT SLICE:", samples[0, :5, :8])
-
-        print(samples.shape)
-        print(samples.mean().item(), samples.std().item())
         self.count += 1
         lengths = stop_steps * self.conf.model.reduction_factor
 
@@ -128,15 +110,9 @@ class Processor:
         wav_lens = lengths * hop_size
         with torch.no_grad():
             batch_wavs = self.vocoder(samples, num_quantizers=num_quantizers)
-            print("===== VOCODER OUTPUT =====")
-            print(batch_wavs.shape)
-            print(batch_wavs.mean().item(), batch_wavs.std().item())
-            print("VOCODER OUTPUT STATS:")
-            print(batch_wavs.mean(), batch_wavs.std())
 
         wavs = []
         for i, wav in enumerate(batch_wavs):
-            print(f"wav_lens[i]={wav_lens[i]}, wav.shape before slice={wav.shape}")
             wav = wav[: wav_lens[i]].unsqueeze(dim=0)
             wavs.append(wav)
         return wavs
@@ -208,15 +184,10 @@ def prepare_sampler_and_processor(lm, conf, args, device="cuda"):
     processor.load_ssl_model(lm.gslm_pipeline.ssl_model.to(torch.bfloat16))
     processor.load_statistics(lm.gslm_pipeline.mean, lm.gslm_pipeline.std)
 
-    print("===== NORMALIZATION STATS =====")
-    print("mean:", processor.mean.mean().item())
-    print("std:", processor.std.mean().item())
-    print("min/std:", processor.std.min().item(), processor.std.max().item())
-
     return sampler, processor
 
 def save_wav(wav, path, sample_rate):
-    torchaudio.save(path, wav.cpu(), sample_rate, backend="soundfile")
+    torchaudio.save(path, wav.float().cpu(), sample_rate, backend="soundfile")
 
 def run_unconditional(args, sampler, processor):
     codec_size = 2048
@@ -227,24 +198,10 @@ def run_unconditional(args, sampler, processor):
         cur_bs = min(batch_size, samples_to_generate - generated)
         with torch.no_grad():
             # eos_token is set to the last token id if token loss is used
-            # eos_aux_token = codec_size + processor.conf.model.n_special_tokens - 1 if getattr(processor.conf.optimizer, "token_loss_weight", 0) > 0 else None
-            eos_aux_token = None
-            print("DEBUG batch_size:", args.batch_size)
-            print("DEBUG num_quantizers:", args.num_quantizers)
-            print("DEBUG sampler kwargs:", sampler_kwargs if "sampler_kwargs" in locals() else "not found")
-
+            eos_aux_token = codec_size + processor.conf.model.n_special_tokens - 1 if getattr(processor.conf.optimizer, "token_loss_weight", 0) > 0 else None
             samples, stop_steps = sampler.sample(batch_size=cur_bs, min_len=args.min_len, max_len=args.max_len, ode_steps=args.ode_steps, token_temperature=args.token_temperature, temperature=args.temperature, solver=args.solver, eos_aux_token=eos_aux_token, cfg_scale=args.cfg_scale, topk=args.topk, topp=args.topp, penalize_silence=args.penalize_silence, penalize_weight=args.penalize_weight)
-            print("===== SAMPLER RAW OUTPUT =====")
-            print("shape:", samples.shape)
-            print("mean:", samples.mean().item())
-            print("std:", samples.std().item())
-            print("min/max:", samples.min().item(), samples.max().item())
-            print("stop_steps:", stop_steps)
-        samples = processor.unmerge_and_unnormalize(samples)
-        print("===== AFTER UNMERGE =====")
-        print(samples.shape)
-        print(samples.mean().item(), samples.std().item())
 
+        samples = processor.unmerge_and_unnormalize(samples)
         wavs = processor.batch_vocoding(samples, stop_steps, args.num_quantizers)
         for wav in wavs:
             yield str(generated), wav, processor.sample_rate
@@ -256,19 +213,14 @@ def run_conditional(args, sampler, processor, prompt_wavs):
     for prompt_idx, (prompt_id, wav, duration) in enumerate(prompt_wavs):
         reduced_feats = processor.get_ssl_feats(wav, duration, duplicate=args.batch_size)
         reduced_feats = reduced_feats.to(torch.bfloat16)
+
         for batch_idx in range(args.samples_per_prompt // args.batch_size):
             with torch.no_grad():
                 eos_aux_token = codec_size + processor.conf.model.n_special_tokens - 1 if getattr(processor.conf.optimizer, "token_loss_weight", 0) > 0 else None
                 samples, stop_steps = sampler.sample(batch_size=args.batch_size, min_len=args.min_len, max_len=args.max_len, ode_steps=args.ode_steps, token_temperature=args.token_temperature, temperature=args.temperature, prompts=reduced_feats, solver=args.solver, eos_aux_token=eos_aux_token, cfg_scale=args.cfg_scale, topk=args.topk, topp=args.topp, penalize_silence=args.penalize_silence, penalize_weight=args.penalize_weight)
-                print(f"Sampler received min_len={args.min_len}, max_len={args.max_len}")
-
 
             samples = processor.unmerge_and_unnormalize(samples)
             wavs = processor.batch_vocoding(samples, stop_steps, args.num_quantizers)
-
-            print(f"Prompt {prompt_id}: duration {duration}s, reduced_feats {reduced_feats.shape}, samples {samples.shape}, stop_steps {stop_steps}")
-            print(f"stop_steps values: {stop_steps.cpu().numpy()}")
-            print(f"reduced_feats min/max/mean: {reduced_feats.min():.3f}/{reduced_feats.max():.3f}/{reduced_feats.mean():.3f}")
 
             for i, wav in enumerate(wavs):
                 yield prompt_id, wav, processor.sample_rate
@@ -281,12 +233,6 @@ def main():
 
     print(f"loading {args.ckpt_path}")
     lm = load_model(args, conf, device=device)
-    print("===== MODEL CONFIG DEBUG =====")
-    print("conf.model.n_quantizers:", conf.model.n_quantizers)
-    print("conf.model.ssl_dim:", conf.model.ssl_dim)
-    print("conf.model.reduction_factor:", conf.model.reduction_factor)
-    print("conf.model.decoder_dim:", conf.model.decoder_dim)
-    print("args.num_quantizers:", args.num_quantizers)
     lm.eval()
 
     sampler, processor = prepare_sampler_and_processor(lm, conf, args, device=device)

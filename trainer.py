@@ -299,24 +299,6 @@ class LanguageModeling(pl.LightningModule):
             self.log("test/token_loss", token_loss, on_step=False, on_epoch=True, prog_bar=True, logger=True, sync_dist=True)
             self.log("test/token_acc", token_acc, on_step=False, on_epoch=True, prog_bar=True, logger=True, sync_dist=True)
         return total_loss, token_loss, token_acc
-    
-    # def on_after_backward(self):
-    #     total_norm_sq = 0.0
-    #     for p in self.parameters():
-    #         if p.grad is not None:
-    #             param_norm = p.grad.detach().data.norm(2)
-    #             total_norm_sq += param_norm.item() ** 2
-    #     total_norm = tfotal_norm_sq ** 0.5
-    #     print("Gradient norm this step:", total_norm)  # <- debug
-    #     self.log(
-    #         "train/grad_norm",
-    #         total_norm,
-    #         on_step=True,
-    #         on_epoch=False,
-    #         prog_bar=True,
-    #         logger=True,
-    #         sync_dist=True,
-        # )
 
 def main():
     parser = argparse.ArgumentParser(description="")

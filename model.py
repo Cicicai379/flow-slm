@@ -420,54 +420,50 @@ class ELMDecoderWrapper(BaseDecoderWrapper):
         # remove the last frame
         return logits, aux_output
 
-
-# from transformers import AutoModel
-# from contextlib import nullcontext
-
-# from spidr.models.spidr import SpidR as SPIDR
+# from spidr.models.spidr import SpidR
 # from spidr.config import SpidRConfig
 # from dataclasses import replace
-# print(SpidRConfig.__dataclass_fields__)
+
 # class SPIDREncoder(torch.nn.Module):
 #     def __init__(self, conf, freeze=True):
 #         super().__init__()
 #         spidr_cfg = SpidRConfig()
 #         spidr_cfg = replace(
 #             spidr_cfg,
-#             encoder_embed_dim=conf.model.ssl_dim,
 #             extractor_mode="layer_norm"
 #         )
-#         self.model = SPIDR(spidr_cfg)
+#         self.model = SpidR(spidr_cfg)
+
+#         for p in self.model.parameters():
+#             p.requires_grad = False
+
+#         self.model.eval()
+        
 #         self.freeze = freeze
 #         self.model.config = spidr_cfg
 
-#         # SPIDR hidden size
+#         # projection to match Mimi dim if needed
 #         self.spidr_dim = self.model.config.encoder_embed_dim
 #         if self.spidr_dim != conf.model.ssl_dim:
 #             self.proj = nn.Linear(self.spidr_dim, conf.model.ssl_dim)
 #         else:
 #             self.proj = nn.Identity()
 
-
 #         if freeze:
 #             self.model.eval()
 #             for p in self.model.parameters():
 #                 p.requires_grad = False
-    
+
 #     def forward(self, wavs, wav_lens):
 #         context = torch.no_grad() if self.freeze else nullcontext()
-
 #         with context:
-#             out = self.model(wavs)  # SPIDR may return a tuple
-#             if isinstance(out, tuple):
-#                 feats = out[0]  # take the first element as tensor
-#             else:
-#                 feats = out.last_hidden_state
+#             codebooks = self.model.get_codebooks(wavs, onehot=False)
 
-#             # If feats itself is a tuple (SPIDR sometimes nests), take first element
-#             if isinstance(feats, tuple):
-#                 feats = feats[0]
+#         # last codebook is the semantic one
+#         tokens = codebooks[-1]              # [B, T, codebook_size]
+#         tokens = tokens.argmax(-1)          # [B, T]
+#         tokens = tokens.unsqueeze(-1)       # [B, T, 1]
 
-#         feats = self.proj(feats)  # [B, T, ssl_dim]
-#         tokens = None
+#         feats = None  # we don't use SPIDR features
 #         return feats, tokens
+

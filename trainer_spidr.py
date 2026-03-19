@@ -157,7 +157,9 @@ class LanguageModeling(pl.LightningModule):
             L = token_padding_mask.shape[1]
             for i in range(k_future_tokens):
                 logits_i = token_logits_i[i].reshape(-1, token_logits_i[i].shape[-1])
+                
                 tokens_i = tokens[:, i : i + L].reshape(-1)
+
                 loss_i = self.token_loss_fn(logits_i, tokens_i).reshape(token_logits_i[i].shape[0], token_logits_i[i].shape[1])
                 if self.args.ignore_eos and not training:
                     token_padding_mask_no_eos = (token_padding_mask * (tokens_i.reshape(token_logits_i[i].shape[0], token_logits_i[i].shape[1]) != self.gslm_pipeline.eos_token_index)).float()
@@ -327,7 +329,7 @@ def main():
     parser.add_argument("--hf_training_data", action="store_true")
     parser.add_argument("--validation_only", action="store_true")
     parser.add_argument("--predict_only", action="store_true")
-    parser.add_argument("--training_data", choices=["MLSEn10k", "MLSEn", "MLSEn+people"], default=None)
+    parser.add_argument("--training_data", choices=["MLSEn10k", "MLSEn", "MLSEn+people", "emilia"], default=None)
     parser.add_argument("--valid_id_file", help="Path to validation dataset ids")
     parser.add_argument("--predict_id_file", help="Path to prediction dataset ids")
     parser.add_argument("--prediction_output_dir", help="prediction file path to save")
@@ -415,7 +417,7 @@ def main():
             logger=tb_logger,
             precision=precision,
             devices="auto",
-            strategy=args.strategy,
+            strategy="ddp_find_unused_parameters_true",
             detect_anomaly=True,
 
             # log_every_n_steps=args.every_n_steps,

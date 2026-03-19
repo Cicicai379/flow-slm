@@ -13,17 +13,16 @@ samples_per_prompt=4
 batch_size=4
 solver="euler"
 
-ckpt_path="/data/cicicai/flow_slm/checkpoints/test_run/270m/model-step=0080000.ckpt/fp32_last.ckpt/pytorch_model.bin"
-# ckpt_path="/data/cicicai/flow_slm/270m.bin" checkpoints downloaded from original author
+ckpt_path="/data/cicicai/flow_slm/checkpoints/test_run_v2/270m/model-step=0080000.ckpt/model_fp32.pt/pytorch_model.bin"
+# ckpt_path="/data/cicicai/flow_slm/270m.bin" # checkpoints downloaded from original author
 
 conf_path="conf/270m.yaml"
-output_dir="./test_output/"
+output_dir="./test_output_reproduced_cici/"
 
 if [ ! -d $output_dir ]; then
     mkdir -p $output_dir
 fi
 
 python inference.py --ckpt_path $ckpt_path --conf_path $conf_path --batch_size $batch_size --output_dir $output_dir --temperature $temp --ode_steps $ode_steps --prompt_dir $root_dir --prompt_csv $prompts --solver $solver --samples_per_prompt $samples_per_prompt --save_transcription --save_wav --token_temperature $token_temp --cfg_scale $cfg_scale --num_quantizers $n_quantizers --max_len $max_len --penalize_silence --penalize_weight $penalize_weight
-
 # unconditional generation
 # python inference.py --ckpt_path $ckpt_path --conf_path $conf_path --batch_size $batch_size --output_dir $output_dir --temperature $temp --ode_steps $ode_steps --prompt_dir $root_dir --solver $solver --samples_per_prompt $samples_per_prompt --save_transcription --save_wav --token_temperature $token_temp --cfg_scale $cfg_scale --num_quantizers $n_quantizers --max_len $max_len --penalize_silence --penalize_weight $penalize_weight

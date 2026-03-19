@@ -32,7 +32,7 @@ class SpeechDataModule(pl.LightningDataModule):
 
 
     def setup(self, stage: Optional[str] = None):
-        if stage == "fit":
+        if stage in (None, "fit"):
             print("set up datasets...")
             print(f"using {self.args.training_data} training data")
 
@@ -223,7 +223,8 @@ class EmiliaDataset(Dataset):
             self.tar_files = sorted(tar_pattern)
         else:
             raise TypeError(f"tar_pattern must be str or list, got {type(tar_pattern)}")
-
+        
+        # self.tar_files = self.tar_files[:2]
         self.index = []
 
         # Build index with progress logging
@@ -233,7 +234,7 @@ class EmiliaDataset(Dataset):
         for i, tar_path in enumerate(tqdm(self.tar_files, desc="Scanning tars", unit="tar")):
             with tarfile.open(tar_path) as tar:
                 for member in tar.getmembers():
-                    if member.name.endswith(".wav") or member.name.endswith(".flac"):
+                    if member.name.endswith((".wav", ".flac", ".mp3", ".ogg")):
                         self.index.append((tar_path, member.name))
 
         if self.verbose:

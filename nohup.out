@@ -1,0 +1,141 @@
+conda-forge/linux-64                                        Using cache
+conda-forge/noarch                                          Using cache
+
+Pinned packages:
+
+  - python=3.10
+
+
+Transaction
+
+  Prefix: /data/cicicai/conda_envs/flow2
+
+  Updating specs:
+
+   - ffmpeg=6
+
+
+  Package                                    Version  Build                  Channel            Size
+──────────────────────────────────────────────────────────────────────────────────────────────────────
+  Upgrade:
+──────────────────────────────────────────────────────────────────────────────────────────────────────
+
+  - ffmpeg                                       4.3  hf484d3e_0             pytorch          Cached
+  + ffmpeg                                     6.1.1  gpl_he44c6f3_112       conda-forge        10MB
+
+  Ignored:
+──────────────────────────────────────────────────────────────────────────────────────────────────────
+
+  = aom                                        3.9.1  hac33072_0             conda-forge     Ignored
+  = cairo                                     1.18.0  h3faef2a_0             conda-forge     Ignored
+  = cffi                                       2.0.0  py310h34a4b09_0        conda-forge     Ignored
+  = cffi                                       2.0.0  py310he7384ee_1        conda-forge     Ignored
+  = dav1d                                      1.2.1  hd590300_0             conda-forge     Ignored
+  = expat                                      2.7.4  hecca717_0             conda-forge     Ignored
+  = font-ttf-dejavu-sans-mono                   2.37  hab24e00_0             conda-forge     Ignored
+  = font-ttf-inconsolata                       3.000  h77eed37_0             conda-forge     Ignored
+  = font-ttf-source-code-pro                   2.038  h77eed37_0             conda-forge     Ignored
+  = font-ttf-ubuntu                             0.83  h77eed37_3             conda-forge     Ignored
+  = fontconfig                                2.14.2  h14ed4e7_0             conda-forge     Ignored
+  = fonts-conda-ecosystem                          1  0                      conda-forge     Ignored
+  = fonts-conda-forge                              1  hc364b38_1             conda-forge     Ignored
+  = fribidi                                   1.0.16  hb03c661_0             conda-forge     Ignored
+  = gnutls                                     3.7.9  hb077bed_0             conda-forge     Ignored
+  = gnutls                                    3.6.13  h85f3911_1             conda-forge     Ignored
+  = graphite2                                 1.3.14  hecca717_2             conda-forge     Ignored
+  = harfbuzz                                   9.0.0  hfac3d4d_0             conda-forge     Ignored
+  = icu                                         78.3  h33c6efd_0             conda-forge     Ignored
+  = icu                                         73.2  h59595ed_0             conda-forge     Ignored
+  = lcms2                                       2.15  hfd0df8a_0             conda-forge     Ignored
+  = lcms2                                       2.12  hddcbb42_0             conda-forge     Ignored
+  = lerc                                       4.1.0  hdb68285_0             conda-forge     Ignored
+  = lerc                                         3.0  h9c3ff4c_0             conda-forge     Ignored
+  = libabseil                             20240116.2  cxx17_he02047a_1       conda-forge     Ignored
+  = libass                                    0.17.1  h8fe9dca_1             conda-forge     Ignored
+  = libdeflate                                  1.10  h7f98852_0             conda-forge     Ignored
+  = libdeflate                                  1.17  h0b41bf4_0             conda-forge     Ignored
+  = libdrm                                   2.4.125  hb03c661_1             conda-forge     Ignored
+  = libffi                                     3.4.6  h2dba641_1             conda-forge     Ignored
+  = libffi                                     3.5.2  h3435931_0             conda-forge     Ignored
+  = libglib                                   2.80.2  hf974151_0             conda-forge     Ignored
+  = libhwloc                                  2.11.2  default_he43201b_1000  conda-forge     Ignored
+  = libidn2                                    2.3.8  hfac485b_1             conda-forge     Ignored
+  = libopenvino                             2024.1.0  h2da1b83_7             conda-forge     Ignored
+  = libopenvino-auto-batch-plugin           2024.1.0  hb045406_7             conda-forge     Ignored
+  = libopenvino-auto-plugin                 2024.1.0  hb045406_7             conda-forge     Ignored
+  = libopenvino-hetero-plugin               2024.1.0  h5c03a75_7             conda-forge     Ignored
+  = libopenvino-intel-cpu-plugin            2024.1.0  h2da1b83_7             conda-forge     Ignored
+  = libopenvino-intel-gpu-plugin            2024.1.0  h2da1b83_7             conda-forge     Ignored
+  = libopenvino-intel-npu-plugin            2024.1.0  he02047a_7             conda-forge     Ignored
+  = libopenvino-ir-frontend                 2024.1.0  h5c03a75_7             conda-forge     Ignored
+  = libopenvino-onnx-frontend               2024.1.0  h07e8aee_7             conda-forge     Ignored
+  = libopenvino-paddle-frontend             2024.1.0  h07e8aee_7             conda-forge     Ignored
+  = libopenvino-pytorch-frontend            2024.1.0  he02047a_7             conda-forge     Ignored
+  = libopenvino-tensorflow-frontend         2024.1.0  h39126c6_7             conda-forge     Ignored
+  = libopenvino-tensorflow-lite-frontend    2024.1.0  he02047a_7             conda-forge     Ignored
+  = libopus                                    1.6.1  h280c20c_0             conda-forge     Ignored
+  = libpciaccess                                0.18  hb9d3cd8_0             conda-forge     Ignored
+  = libprotobuf                               4.25.3  h08a7969_0             conda-forge     Ignored
+  = libtasn1                                  4.21.0  hb03c661_0             conda-forge     Ignored
+  = libtiff                                    4.5.0  h6adf6a1_2             conda-forge     Ignored
+  = libtiff                                    4.3.0  h0fcbabc_4             conda-forge     Ignored
+  = libunistring                              0.9.10  h7f98852_0             conda-forge     Ignored
+  = libva                                     2.21.0  h4ab18f5_2             conda-forge     Ignored
+  = libvpx                                    1.14.1  hac33072_0             conda-forge     Ignored
+  = libwebp                                    1.2.2  h3452ae3_0             conda-forge     Ignored
+  = libwebp                                    1.2.4  h1daa5a0_1             conda-forge     Ignored
+  = libwebp-base                               1.2.4  h166bdaf_0             conda-forge     Ignored
+  = libwebp-base                               1.2.2  h7f98852_1             conda-forge     Ignored
+  = libxcb                                      1.15  h0b41bf4_0             conda-forge     Ignored
+  = libxcb                                      1.13  h7f98852_1004          conda-forge     Ignored
+  = libxml2                                   2.12.7  hc051c1a_1             conda-forge     Ignored
+  = nettle                                     3.9.1  h7ab15ed_0             conda-forge     Ignored
+  = nettle                                       3.6  he412f7d_0             conda-forge     Ignored
+  = olefile                                     0.47  pyhd8ed1ab_1           conda-forge     Ignored
+  = openh264                                   2.4.1  h59595ed_0             conda-forge     Ignored
+  = openh264                                   2.1.1  h780b84a_0             conda-forge     Ignored
+  = openjpeg                                   2.5.0  hfec8fc6_2             conda-forge     Ignored
+  = openjpeg                                   2.5.0  h7d73246_0             conda-forge     Ignored
+  = p11-kit                                   0.24.1  hc5aa10d_0             conda-forge     Ignored
+  = pcre2                                      10.43  hcad00b1_0             conda-forge     Ignored
+  = pillow                                     9.4.0  py310h023d228_1        conda-forge     Ignored
+  = pillow                                     8.4.0  py310h07f4688_0        conda-forge     Ignored
+  = pixman                                    0.46.4  h54a6638_1             conda-forge     Ignored
+  = pugixml                                     1.14  h59595ed_0             conda-forge     Ignored
+  = snappy                                     1.2.2  h03e3b7b_1             conda-forge     Ignored
+  = svt-av1                                    2.1.0  hac33072_0             conda-forge     Ignored
+  = tbb                                     2021.7.0  h924138e_0             conda-forge     Ignored
+  = tbb                                    2021.13.0  hceb3a55_1             conda-forge     Ignored
+  = torchvision                               0.20.1  py310_cu124            pytorch         Ignored
+  = x264                                  1!164.3095  h166bdaf_2             conda-forge     Ignored
+  = x265                                         3.5  h924138e_3             conda-forge     Ignored
+  = xorg-fixesproto                              5.0  hb9d3cd8_1003          conda-forge     Ignored
+  = xorg-kbproto                               1.0.7  hb9d3cd8_1003          conda-forge     Ignored
+  = xorg-libice                                1.1.2  hb9d3cd8_0             conda-forge     Ignored
+  = xorg-libsm                                 1.2.6  he73a12e_0             conda-forge     Ignored
+  = xorg-libx11                                1.8.9  h8ee46fc_0             conda-forge     Ignored
+  = xorg-libxext                               1.3.4  h0b41bf4_2             conda-forge     Ignored
+  = xorg-libxfixes                             5.0.3  h7f98852_1004          conda-forge     Ignored
+  = xorg-libxrender                           0.9.11  hd590300_0             conda-forge     Ignored
+  = xorg-renderproto                          0.11.1  hb9d3cd8_1003          conda-forge     Ignored
+  = xorg-xextproto                             7.3.0  hb9d3cd8_1004          conda-forge     Ignored
+  = xorg-xproto                               7.0.31  hb9d3cd8_1008          conda-forge     Ignored
+
+  Summary:
+
+  Upgrade: 1 packages
+  Ignored: 94 packages
+
+  Total download: 10MB
+
+──────────────────────────────────────────────────────────────────────────────────────────────────────
+
+
+Confirm changes: [Y/n] 
+Transaction starting
+error    libmamba File not valid: SHA256 doesn't match expectation "/data/cicicai/conda_cache/ffmpeg-6.1.1-gpl_he44c6f3_112.conda"
+    Expected: d6a6c4d81bf285ec1f05c3a1b3740bdbca1c635961bcf99b366e1d7e1d70aef4
+    Actual: a4cfb76c9a1e58f755869e0cc33707a5e3473f0c8d0d49ddaa10e84e87909486
+    
+ffmpeg-6.1.1-gpl_he44c6f3_112.conda tarball has incorrect SHA256
+critical libmamba Found incorrect downloads. Aborting
