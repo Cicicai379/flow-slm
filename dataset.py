@@ -7,6 +7,7 @@ import os
 from datasets import load_dataset
 from utils import batch_pad_right
 import random
+import re
 import torch
 from typing import Optional, Tuple, List, Sequence
 import glob
@@ -36,12 +37,15 @@ class SpeechDataModule(pl.LightningDataModule):
             print("set up datasets...")
             print(f"using {self.args.training_data} training data")
 
-            if self.args.training_data == "emilia":
-                all_shards = sorted(glob.glob("/data/chrispark/datasets/emilia/Emilia-YODAS/EN/EN-B*.tar"))
-                print("Total shards found:", len(all_shards))
 
-                train_files = all_shards[:-5]
-                val_files   = all_shards[-5:]
+            if self.args.training_data in ("emilia", "emilia_debug"):
+                _base = "/data/kalvinchang/huggingface/hub/datasets--amphion--Emilia-Dataset/snapshots/d7f2f7340a6385696f3766c8049fa920a4707c07/Emilia-YODAS/EN"
+                train_files = expand_emilia_path(f"{_base}/EN-B{{000000..001356}}.tar")
+                val_files   = expand_emilia_path(f"{_base}/EN-B{{001357..001361}}.tar")
+
+                if self.args.training_data == "emilia_debug":
+                    train_files = train_files[:3]
+                    val_files   = val_files[:1]
 
                 print("Train shards:", len(train_files))
                 print("Val shards:", len(val_files))
@@ -55,7 +59,7 @@ class SpeechDataModule(pl.LightningDataModule):
             elif self.args.training_data in ("MLSEn", "MLSEn+people"):
                 size = "full"
             else:
-                raise ValueError(f"{self.args.training_data} is not supported")
+                raise ValueError(f"{self.args.training_data} is not supported. Choose from: emilia, emilia_kalvin, MLSEn, MLSEn10k, MLSEn+people")
 
             vad = getattr(self.conf.data, "vad", False)
 

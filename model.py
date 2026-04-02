@@ -420,50 +420,50 @@ class ELMDecoderWrapper(BaseDecoderWrapper):
         # remove the last frame
         return logits, aux_output
 
-# from spidr.models.spidr import SpidR
-# from spidr.config import SpidRConfig
-# from dataclasses import replace
+from spidr.models.spidr import SpidR
+from spidr.config import SpidRConfig
+from dataclasses import replace
 
-# class SPIDREncoder(torch.nn.Module):
-#     def __init__(self, conf, freeze=True):
-#         super().__init__()
-#         spidr_cfg = SpidRConfig()
-#         spidr_cfg = replace(
-#             spidr_cfg,
-#             extractor_mode="layer_norm"
-#         )
-#         self.model = SpidR(spidr_cfg)
+class SPIDREncoder(torch.nn.Module):
+    def __init__(self, conf, freeze=True):
+        super().__init__()
+        spidr_cfg = SpidRConfig()
+        spidr_cfg = replace(
+            spidr_cfg,
+            extractor_mode="layer_norm"
+        )
+        self.model = SpidR(spidr_cfg)
 
-#         for p in self.model.parameters():
-#             p.requires_grad = False
+        for p in self.model.parameters():
+            p.requires_grad = False
 
-#         self.model.eval()
+        self.model.eval()
         
-#         self.freeze = freeze
-#         self.model.config = spidr_cfg
+        self.freeze = freeze
+        self.model.config = spidr_cfg
 
-#         # projection to match Mimi dim if needed
-#         self.spidr_dim = self.model.config.encoder_embed_dim
-#         if self.spidr_dim != conf.model.ssl_dim:
-#             self.proj = nn.Linear(self.spidr_dim, conf.model.ssl_dim)
-#         else:
-#             self.proj = nn.Identity()
+        # projection to match Mimi dim if needed
+        self.spidr_dim = self.model.config.encoder_embed_dim
+        if self.spidr_dim != conf.model.ssl_dim:
+            self.proj = nn.Linear(self.spidr_dim, conf.model.ssl_dim)
+        else:
+            self.proj = nn.Identity()
 
-#         if freeze:
-#             self.model.eval()
-#             for p in self.model.parameters():
-#                 p.requires_grad = False
+        if freeze:
+            self.model.eval()
+            for p in self.model.parameters():
+                p.requires_grad = False
 
-#     def forward(self, wavs, wav_lens):
-#         context = torch.no_grad() if self.freeze else nullcontext()
-#         with context:
-#             codebooks = self.model.get_codebooks(wavs, onehot=False)
+    def forward(self, wavs, wav_lens):
+        context = torch.no_grad() if self.freeze else nullcontext()
+        with context:
+            codebooks = self.model.get_codebooks(wavs, onehot=False)
 
-#         # last codebook is the semantic one
-#         tokens = codebooks[-1]              # [B, T, codebook_size]
-#         tokens = tokens.argmax(-1)          # [B, T]
-#         tokens = tokens.unsqueeze(-1)       # [B, T, 1]
+        # last codebook is the semantic one
+        tokens = codebooks[-1]              # [B, T, codebook_size]
+        tokens = tokens.argmax(-1)          # [B, T]
+        tokens = tokens.unsqueeze(-1)       # [B, T, 1]
 
-#         feats = None  # we don't use SPIDR features
-#         return feats, tokens
+        feats = None  # we don't use SPIDR features
+        return feats, tokens
 

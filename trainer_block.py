@@ -152,7 +152,7 @@ class BlockLanguageModeling(pl.LightningModule):
             return torch.zeros_like(target_blocks[..., 0])
 
         B, num_blocks, block_dim = target_blocks.shape
-        total_loss = torch.zeros(B, num_blocks, device=target_blocks.device)
+        total_loss = torch.zeros(B, num_blocks, device=target_blocks.device, dtype=target_blocks.dtype)
 
         # Process each block autoregressively
         for block_idx in range(num_blocks):
@@ -162,7 +162,7 @@ class BlockLanguageModeling(pl.LightningModule):
                 context_reprs = block_reprs[:, block_idx-1]  # Use previous block as immediate context
             else:
                 # First block: use null context
-                context_reprs = torch.zeros(B, self.conf.model.decoder_dim, device=target_blocks.device)
+                context_reprs = torch.zeros(B, self.conf.model.decoder_dim, device=target_blocks.device, dtype=target_blocks.dtype)
 
             # Current target block (flattened)
             current_target = target_blocks[:, block_idx]  # [B, block_dim]
@@ -185,18 +185,21 @@ class BlockLanguageModeling(pl.LightningModule):
 
             token_logits_i = torch.chunk(token_logits, k_future, dim=2)
             k_future_tokens = k_future if training else self.args.use_k_future_tokens
-            L = token_padding_mask.shape[1]
+            L = token_logits_i[0].shape[1]  # use actual logits length to avoid off-by-one with mask
+            mask = token_padding_mask[:, :L]  # align mask to logits length
+            token_losses = mask.new_zeros((mask.shape[0], L)).float()
+            token_weight = mask.new_zeros((mask.shape[0], L)).float()
             for i in range(k_future_tokens):
                 logits_i = token_logits_i[i].reshape(-1, token_logits_i[i].shape[-1])
                 tokens_i = tokens[:, i : i + L].reshape(-1)
-                loss_i = self.token_loss_fn(logits_i, tokens_i).reshape(token_logits_i[i].shape[0], token_logits_i[i].shape[1])
+                loss_i = self.token_loss_fn(logits_i, tokens_i).reshape(token_logits_i[i].shape[0], L)
                 if self.args.ignore_eos and not training:
-                    token_padding_mask_no_eos = (token_padding_mask * (tokens_i.reshape(token_logits_i[i].shape[0], token_logits_i[i].shape[1]) != self.gslm_pipeline.eos_token_index)).float()
+                    token_padding_mask_no_eos = (mask * (tokens_i.reshape(token_logits_i[i].shape[0], L) != self.gslm_pipeline.eos_token_index)).float()
                     token_losses += loss_i * token_padding_mask_no_eos
                     token_weight += token_padding_mask_no_eos
                 else:
-                    token_losses += loss_i * token_padding_mask
-                    token_weight += token_padding_mask
+                    token_losses += loss_i * mask
+                    token_weight += mask
             token_weight[token_weight == 0] = 1e-6
             final_token_loss = token_losses / token_weight
         else:
@@ -247,7 +250,8 @@ class BlockLanguageModeling(pl.LightningModule):
             flow_loss_val = torch.sum(block_flow_loss * block_mask.float()) / torch.sum(block_mask.float())
 
             if token_loss is not None:
-                token_loss_val = torch.sum(token_loss * token_padding_mask) / torch.sum(token_padding_mask)
+                _mask = token_padding_mask[:, :token_loss.shape[1]]
+                token_loss_val = torch.sum(token_loss * _mask) / torch.sum(_mask)
             else:
                 token_loss_val = None
 
@@ -257,7 +261,17 @@ class BlockLanguageModeling(pl.LightningModule):
 
             # Token accuracy (if available)
             if token_loss_val is not None and token_logits is not None:
-                token_acc = torch.sum((torch.argmax(token_logits, dim=-1) == tokens.reshape(tokens.shape[0], tokens.shape[1] * tokens.shape[2])).float() * token_padding_mask) / torch.sum(token_padding_mask)
+                if hasattr(self.conf.model, "extra_future_tokens") and self.conf.model.extra_future_tokens > 1:
+                    k = self.conf.model.extra_future_tokens
+                    first_logits = torch.chunk(token_logits, k, dim=2)[0]
+                    L_acc = first_logits.shape[1]
+                    first_target = tokens[:, :L_acc, 0]
+                    _acc_mask = token_padding_mask[:, :L_acc]
+                    token_acc = torch.sum((torch.argmax(first_logits, dim=-1) == first_target).float() * _acc_mask) / torch.sum(_acc_mask)
+                else:
+                    L_acc = token_logits.shape[1]
+                    _acc_mask = token_padding_mask[:, :L_acc]
+                    token_acc = torch.sum((torch.argmax(token_logits, dim=-1) == tokens[:, :L_acc, 0]).float() * _acc_mask) / torch.sum(_acc_mask)
             else:
                 token_acc = None
 
@@ -332,7 +346,7 @@ def main():
     parser.add_argument("--hf_training_data", action="store_true")
     parser.add_argument("--validation_only", action="store_true")
     parser.add_argument("--predict_only", action="store_true")
-    parser.add_argument("--training_data", choices=["MLSEn10k", "MLSEn", "MLSEn+people", "emilia"], default=None)
+    parser.add_argument("--training_data", choices=["MLSEn10k", "MLSEn", "MLSEn+people", "emilia", "emilia_debug"], default=None)
     parser.add_argument("--valid_id_file", help="Path to validation dataset ids")
     parser.add_argument("--predict_id_file", help="Path to prediction dataset ids")
     parser.add_argument("--prediction_output_dir", help="prediction file path to save")

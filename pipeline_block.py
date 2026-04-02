@@ -229,6 +229,8 @@ class GSLMBlockPipeline(nn.Module):
             self.conf.optimizer.token_loss_weight > 0 or self.conf.model.token_conditioning
         ) and self.conf.model.n_quantizers > 0:
             token_logits = split_features(aux_output, self.conf.model.reduction_factor)  # [B, T * r, F // r]
+            # aux_output is block-level [B, num_blocks, aux_dim]; expand to frame-level
+            token_logits = token_logits.repeat_interleave(self.block_size, dim=1)  # [B, num_blocks * block_size, aux_dim]
             k = 1 if not hasattr(self.conf.model, "extra_future_tokens") or self.conf.model.extra_future_tokens == 0 else self.conf.model.extra_future_tokens
             ssl_abs_len = torch.round(wav_len * tokens.shape[1]).long()
             # add one for eos token
@@ -238,8 +240,8 @@ class GSLMBlockPipeline(nn.Module):
             tokens = torch.cat([tokens, tokens.new_ones((bs, k, 1)).long() * eos_index], dim=1)  # shape [B, T + k, 1]
             offsets = ssl_abs_len.unsqueeze(1) + torch.arange(k, device=tokens.device).unsqueeze(0)  # shape [B, k]
             batch_indices = torch.arange(bs, device=tokens.device).unsqueeze(1).expand(bs, k)         # shape [B, k]
-            tokens[batch_indices, offsets] = eos_index
-            token_logits = token_logits[:, :tokens.shape[1], :]  # align with tokens
+            tokens[batch_indices, offsets, 0] = eos_index
+            token_logits = token_logits[:, :split_padding_mask.shape[1], :]  # align to loss mask length
         else:
             token_logits = None
             tokens = None
@@ -294,7 +296,7 @@ class GSLMBlockPipeline(nn.Module):
         B, num_blocks, block_size, F = blocks.shape
 
         # Flatten each block: [B, num_blocks, block_size, F] → [B, num_blocks, block_size * F]
-        target_blocks = blocks.view(B, num_blocks, self.block_dim)
+        target_blocks = blocks.reshape(B, num_blocks, self.block_dim)
 
         # Process blocks autoregressively through LM
         block_sequence = target_blocks.clone()  # [B, num_blocks, block_dim]

@@ -272,6 +272,10 @@ class BlockFlowNet(nn.Module):
         Returns:
             [B, block_dim] predicted velocity/noise for joint block
         """
+        weight_dtype = self.input_proj.weight.dtype
+        x = x.to(weight_dtype)
+        t = t.to(weight_dtype)
+        c = c.to(weight_dtype)
         x = self.input_proj(x)  # [B, block_dim] → [B, model_channels]
         t = self.time_embed(t.unsqueeze(1))  # [B] → [B, 1, model_channels]
         t = t.squeeze(1)  # [B, model_channels]

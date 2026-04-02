@@ -329,7 +329,7 @@ def main():
     parser.add_argument("--hf_training_data", action="store_true")
     parser.add_argument("--validation_only", action="store_true")
     parser.add_argument("--predict_only", action="store_true")
-    parser.add_argument("--training_data", choices=["MLSEn10k", "MLSEn", "MLSEn+people", "emilia"], default=None)
+    parser.add_argument("--training_data", choices=["MLSEn10k", "MLSEn", "MLSEn+people", "emilia", "emilia_debug"], default=None)
     parser.add_argument("--valid_id_file", help="Path to validation dataset ids")
     parser.add_argument("--predict_id_file", help="Path to prediction dataset ids")
     parser.add_argument("--prediction_output_dir", help="prediction file path to save")
