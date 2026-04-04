@@ -42,5 +42,5 @@ training:
   num_workers: 2
   accumulate_grad_batches: 1
   num_warmup_steps: 100
-  max_steps: 1000  # Short test run
+  max_steps: 85000 
   min_lr_ratio: 0.1
