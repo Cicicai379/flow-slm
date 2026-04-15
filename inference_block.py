@@ -12,8 +12,6 @@ from inference import Processor, load_audio_list, save_wav, load_conf, WhisperWr
 
 
 class BlockSampler(torch.nn.Module):
-    """Autoregressive block-level sampler using BlockFlowLoss."""
-
     def __init__(self, gslm_pipeline, block_flow_loss, frame_rate=12.5, silence_indices=None):
         super().__init__()
         self.gslm_pipeline = gslm_pipeline
@@ -47,13 +45,6 @@ class BlockSampler(torch.nn.Module):
                token_temperature=1.0, temperature=1.0, prompts=None,
                solver="euler", eos_aux_token=None, cfg_scale=0.3,
                topp=0.95, penalize_silence=False, penalize_weight=10.0):
-        """Generate blocks autoregressively.
-
-        Args:
-            prompts: [B, T_prompt, feature_dim] normalized, reduced prompt features.
-        Returns:
-            frames [B, T_total, feature_dim] (prompt + generated), stop_steps [B] in reduced frames.
-        """
         max_infer_frames = round(max_len * self.frame_rate / self.reduction_factor)
         max_infer_blocks = (max_infer_frames + self.block_size - 1) // self.block_size
 

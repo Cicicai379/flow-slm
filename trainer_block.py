@@ -1,10 +1,3 @@
-"""Training module for continuous GSLM.
-
-This module contains the main training class LanguageModeling which handles
-the training, validation, and prediction steps for the continuous GSLM model.
-Refactored to split responsibilities into smaller helper methods, fix a couple
-of mode/device issues, and improve readability.
-"""
 
 import torch
 import torch.nn.functional as F
@@ -28,10 +21,6 @@ from dataset import SpeechDataModule
 from lightning.pytorch.plugins.environments import LightningEnvironment
 
 class BlockLanguageModeling(pl.LightningModule):
-    """Main training class for block diffusion GSLM.
-
-    Implements joint block modeling with autoregressive context.
-    """
 
     def __init__(self, args, conf):
         super().__init__()
@@ -40,14 +29,8 @@ class BlockLanguageModeling(pl.LightningModule):
         conf_dict = self.conf.toDict()
         self.save_hyperparameters(conf_dict)
 
-        try:
-            self.gslm_pipeline = GSLMBlockPipeline(conf, args)
-            print(f"✓ GSLMBlockPipeline initialized successfully")
-        except Exception as e:
-            print(f"✗ Failed to initialize GSLMBlockPipeline: {e}")
-            raise
+        self.gslm_pipeline = GSLMBlockPipeline(conf, args)
 
-        # build block flow loss
         if self.conf.optimizer.loss_function != "BLOCK_FM":
             raise ValueError(f"Block trainer requires loss_function='BLOCK_FM', got '{self.conf.optimizer.loss_function}'")
 
@@ -116,16 +99,7 @@ class BlockLanguageModeling(pl.LightningModule):
         }
         return lr_scheduler_config
 
-    def _run_pipeline(
-        self,
-        wavs: torch.Tensor,
-        wav_len: torch.Tensor,
-        eval_mode: bool,
-    ):
-        """
-        Call the pipeline. If eval_mode is True, temporarily set pipeline.eval()
-        and restore previous training flag after call.
-        """
+    def _run_pipeline(self, wavs, wav_len, eval_mode):
         if eval_mode:
             was_training = self.gslm_pipeline.training
             self.gslm_pipeline.eval()
@@ -138,16 +112,6 @@ class BlockLanguageModeling(pl.LightningModule):
             return self.gslm_pipeline(wavs, wav_len)
 
     def _compute_block_flow_loss(self, block_reprs, target_blocks, block_mask):
-        """Compute block flow loss for joint block modeling.
-
-        Args:
-            block_reprs: [B, num_blocks, z_dim] LM conditioning for each block
-            target_blocks: [B, num_blocks, block_dim] flattened target blocks
-            block_mask: [B, num_blocks] valid block mask
-
-        Returns:
-            loss: [B, num_blocks] per-block losses
-        """
         if getattr(self.conf.optimizer, "loss_weight", 1.0) <= 0:
             return torch.zeros_like(target_blocks[..., 0])
 

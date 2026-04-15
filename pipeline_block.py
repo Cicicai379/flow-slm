@@ -48,15 +48,7 @@ class GSLMBlockPipeline(nn.Module):
 
         if hasattr(self.conf.model, "ssl_model") and self.conf.model.ssl_model == "mimi":
             n_quantizers = getattr(self.conf.model, "n_quantizers", 0)
-            try:
-                if MimiEncoder is not None:
-                    self.ssl_model = MimiEncoder(freeze=self.conf.model.freeze, n_quantizers=n_quantizers)
-                    print("✓ MimiEncoder initialized")
-                else:
-                    raise ImportError("MimiEncoder not available")
-            except Exception as e:
-                print(f"Warning: Could not initialize MimiEncoder ({e}), using dummy")
-                self.ssl_model = None
+            self.ssl_model = MimiEncoder(freeze=self.conf.model.freeze, n_quantizers=n_quantizers)
 
         # Initialize decoder model
         if "OpenELM" in self.conf.model.decoder:
@@ -72,12 +64,8 @@ class GSLMBlockPipeline(nn.Module):
             trust_remote_code=True
         )
 
-        # Initialize normalization (moved to helper)
         self._init_normalization()
-        # Initialize remaining model components (moved to helper)
         self._init_model_components(decoder_model)
-
-        # Initialize embeddings (moved to helper)
         self._init_embeddings()
 
     @property
@@ -85,10 +73,6 @@ class GSLMBlockPipeline(nn.Module):
         return self.decoder.lm
 
     def _init_normalization(self):
-        """Load and register static normalization buffers if configured.
-
-        This was previously in __init__; extracted for clarity and reuse.
-        """
         if hasattr(self.conf.model, "norm") and self.conf.model.norm == "static":
             mean = np.load(self.conf.model.mean_path)
             self.register_buffer('mean', torch.from_numpy(mean).float())
@@ -110,7 +94,6 @@ class GSLMBlockPipeline(nn.Module):
         if (self.conf.model.extra_future_tokens > 1 or self.conf.model.future_conditioning) and self.conf.model.reduction_factor > 1:
             raise ValueError("extra_future_tokens > 1 is not supported when reduction_factor > 1.")
 
-        # Initialize auxiliary output dimensions for token prediction
         if self.conf.model.ssl_model == "mimi" and self.conf.optimizer.token_loss_weight > 0:
             n_special_tokens = getattr(self.conf.model, "n_special_tokens", 0)
             self.aux_output_dim = self.ssl_model.model.config.codebook_size + n_special_tokens
@@ -121,7 +104,6 @@ class GSLMBlockPipeline(nn.Module):
         else:
             self.aux_output_dim = None
 
-        # Initialize token embedding dimensions
         self.token_emb_dim = self.conf.model.token_emb_dim if hasattr(self.conf.model, "token_emb_dim") and hasattr(self.conf.model, "token_conditioning") and self.conf.model.token_conditioning else 0
         if hasattr(self.conf.model, "future_conditioning") and self.conf.model.future_conditioning:
             self.token_emb_dim *= self.conf.model.extra_future_tokens
@@ -153,11 +135,7 @@ class GSLMBlockPipeline(nn.Module):
             self.eos_index = decoder_model.config.eos_token_id
 
     def _init_embeddings(self):
-        """Create embedding layers for block modeling."""
-        # Initialize embeddings for block conditioning (no BOS for block model)
         self.null_block = nn.Parameter(torch.randn(self.block_dim) * 0.02)
-
-        # Initialize token embeddings if needed
         if hasattr(self.conf.model, "token_conditioning") and self.conf.model.token_conditioning:
             # add token emb to z, only support mimi
             if hasattr(self.conf.model, "add_special_token_to_embedding_table") and self.conf.model.add_special_token_to_embedding_table:
@@ -166,16 +144,6 @@ class GSLMBlockPipeline(nn.Module):
                 self.token_embed = nn.Embedding(self.ssl_model.model.config.codebook_size, embedding_dim=self.conf.model.token_emb_dim)
     
     def _split_into_blocks(self, ssl_feats: torch.Tensor, wav_len: torch.Tensor):
-        """Split SSL features into blocks for joint modeling.
-
-        Args:
-            ssl_feats: [B, T, F] SSL features
-            wav_len: [B] sequence lengths
-
-        Returns:
-            blocks: [B, num_blocks, block_size, F] blocked features
-            block_mask: [B, num_blocks] mask for valid blocks
-        """
         B, T, F = ssl_feats.shape
 
         # Pad sequence to be divisible by block_size
@@ -216,11 +184,6 @@ class GSLMBlockPipeline(nn.Module):
         return reduced_ssl_feats, ssl_feats, ssl_abs_len, tokens
 
     def _process_token_predictions(self, aux_output, wav_len, tokens, bs):
-        """Extracted logic for processing token predictions.
-
-        Returns (token_logits, tokens, split_padding_mask).
-        If tokens is None or token prediction is disabled, returns (None, None, None).
-        """
         # If tokens is None, nothing to do
         if tokens is None:
             return None, None, None
@@ -250,10 +213,6 @@ class GSLMBlockPipeline(nn.Module):
         return token_logits, tokens, split_padding_mask
 
     def _apply_token_conditioning_and_padding(self, logits, tokens, padding_mask, abs_len, bs):
-        """Apply token conditioning to logits (if enabled) and compute padding_mask_for_loss.
-
-        Returns (logits, padding_mask_for_loss).
-        """
         # Apply token conditioning if specified
         if hasattr(self.conf.model, "token_conditioning") and self.conf.model.token_conditioning:
             L = logits.shape[1]
@@ -279,16 +238,6 @@ class GSLMBlockPipeline(nn.Module):
         return logits, padding_mask_for_loss
 
     def forward(self, wavs, wav_len, **decoder_kwargs):
-        """Forward pass for block diffusion pipeline.
-
-        Returns:
-            block_reprs: [B, num_blocks, decoder_dim] LM representations per block
-            target_blocks: [B, num_blocks, block_dim] flattened target blocks
-            block_mask: [B, num_blocks] valid block mask
-            token_logits: auxiliary token predictions (if enabled)
-            tokens: quantized tokens (if available)
-            split_padding_mask: token mask (if available)
-        """
         reduced_ssl_feats, ssl_feats, ssl_abs_len, tokens = self._get_ssl_feats(wavs, wav_len)
 
         # Split features into blocks for joint modeling

@@ -34,15 +34,6 @@ class MimiEncoder(torch.nn.Module):
                 param.requires_grad = False
 
     def forward(self, wavs: torch.Tensor, wav_lens: torch.Tensor) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
-        """Extract Mimi features from input waveform.
-
-        Args:
-            wavs: Input waveform tensor
-            wav_lens: Waveform length tensor
-
-        Returns:
-            Extracted features tensor, optionally with quantized codes
-        """
         context = torch.no_grad() if self.freeze else nullcontext()
         with context:
             embeddings = self.model.encoder(wavs.unsqueeze(dim=1))
@@ -68,16 +59,6 @@ class MimiDecoder(torch.nn.Module):
         self.model = MimiModel.from_pretrained("kyutai/mimi")
 
     def forward(self, embeddings: torch.Tensor, num_quantizers: Optional[int] = None, return_codes: bool = False) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
-        """Decode Mimi embeddings to audio.
-
-        Args:
-            embeddings: Input embeddings tensor
-            num_quantizers: Number of quantizers to use
-            return_codes: Whether to return quantized codes
-
-        Returns:
-            Decoded audio tensor, optionally with codes
-        """
         num_quantizers = self.model.config.num_quantizers if num_quantizers is None else num_quantizers
         embeddings = embeddings.transpose(1, 2)
         codes = self.model.quantizer.encode(embeddings, num_quantizers)
@@ -103,17 +84,6 @@ class TimestepEmbedder(nn.Module):
 
     @staticmethod
     def timestep_embedding(t: torch.Tensor, dim: int, max_period: int = 10000, scale: float = 1000.0) -> torch.Tensor:
-        """Create sinusoidal timestep embeddings.
-
-        Args:
-            t: A 1-D Tensor of N indices, one per batch element. These may be fractional.
-            dim: The dimension of the output.
-            max_period: Controls the minimum frequency of the embeddings.
-            scale: Scaling factor for the embeddings.
-
-        Returns:
-            An (N, D) Tensor of positional embeddings.
-        """
         # https://github.com/openai/glide-text2im/blob/main/glide_text2im/nn.py
         half = dim // 2
         freqs = torch.exp(
@@ -126,14 +96,6 @@ class TimestepEmbedder(nn.Module):
         return embedding
 
     def forward(self, t: torch.Tensor) -> torch.Tensor:
-        """Forward pass for timestep embedding.
-
-        Args:
-            t: Timestep tensor
-
-        Returns:
-            Embedded timestep tensor
-        """
         t_freq = self.timestep_embedding(t, self.frequency_embedding_size).to(t.dtype)
         t_emb = self.mlp(t_freq)
         return t_emb
@@ -159,15 +121,6 @@ class ResBlock(nn.Module):
         )
 
     def forward(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
-        """Forward pass for residual block with adaptive layer norm.
-
-        Args:
-            x: Input tensor
-            y: Conditioning tensor
-
-        Returns:
-            Output tensor with residual connection
-        """
         shift_mlp, scale_mlp, gate_mlp = self.adaLN_modulation(y).chunk(3, dim=-1)
         h = modulate(self.in_ln(x), shift_mlp, scale_mlp)
         h = self.mlp(h)
@@ -187,15 +140,6 @@ class FinalLayer(nn.Module):
         )
 
     def forward(self, x: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
-        """Forward pass for final layer.
-
-        Args:
-            x: Input tensor
-            c: Conditioning tensor
-
-        Returns:
-            Output tensor
-        """
         shift, scale = self.adaLN_modulation(c).chunk(2, dim=-1)
         x = modulate(self.norm_final(x), shift, scale)
         x = self.linear(x)
@@ -262,16 +206,6 @@ class BlockFlowNet(nn.Module):
         nn.init.constant_(self.final_layer.linear.bias, 0)
 
     def forward(self, x: torch.Tensor, t: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
-        """Apply block flow network to noisy flattened block.
-
-        Args:
-            x: [B, block_dim] flattened noisy block
-            t: [B] timestep for each batch element
-            c: [B, z_channels] conditioning from LM for this block
-
-        Returns:
-            [B, block_dim] predicted velocity/noise for joint block
-        """
         weight_dtype = self.input_proj.weight.dtype
         x = x.to(weight_dtype)
         t = t.to(weight_dtype)
@@ -369,15 +303,6 @@ class ELMBlockDecoderWrapper(BaseDecoderWrapper):
         attention_mask: Optional[torch.Tensor] = None,
         **kwargs,
     ):
-        """Forward pass for block-aware ELM decoder.
-
-        Args:
-            block_sequence: [B, num_blocks, block_size * feature_dim] flattened blocks
-            attention_mask: Optional mask for sequence length
-
-        Returns:
-            Block-level representations for flow matching
-        """
         batch_size, num_blocks, block_dim = block_sequence.shape
 
         # Project each flattened block to decoder dimension

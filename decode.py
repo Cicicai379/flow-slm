@@ -16,7 +16,7 @@ class Sampler(torch.nn.Module):
         self.frame_rate = frame_rate
         self.sigmoid = nn.Sigmoid()
         # default silence indices can be overridden via constructor
-        self.silence_indices = silence_indices or [1049, 127, 1880, 1492, 972, 1031, 395, 2029, 581, 175, 1926, 407, 1316]
+        self.silence_indices = silence_indices if silence_indices is not None else [1049, 127, 1880, 1492, 972, 1031, 395, 2029, 581, 175, 1926, 407, 1316]
 
     def _top_p_filter(self, logits: torch.Tensor, p: float) -> torch.Tensor:
         """Return logits with tokens beyond cumulative probability p filtered to -inf."""

@@ -5,10 +5,6 @@ import numpy as np
 from model_block import BlockFlowNet
 
 class BlockFlowLoss(nn.Module):
-    """Block flow matching loss for joint block modeling.
-
-    Each block is treated as a single high-dimensional variable for flow matching.
-    """
     def __init__(
         self,
         block_dim: int,         # Flattened block dimension (block_size * feature_dim)
@@ -38,15 +34,6 @@ class BlockFlowLoss(nn.Module):
         )
 
     def forward(self, z: torch.Tensor, target_block: torch.Tensor) -> torch.Tensor:
-        """Compute flow loss for a single block.
-
-        Args:
-            z: [B, z_dim] LM conditioning for this block
-            target_block: [B, block_dim] flattened target block
-
-        Returns:
-            loss: [B, block_dim] per-element block loss
-        """
         batch_size = target_block.shape[0]
         device = target_block.device
         dtype = target_block.dtype
@@ -92,17 +79,6 @@ class BlockFlowLoss(nn.Module):
         solver: str = "euler",
         cfg_scale: float = 0.0
     ) -> torch.Tensor:
-        """Sample from block flow model.
-
-        Args:
-            z: [B, z_dim] conditioning for each batch element
-            x: [B, block_dim] initial noise (if None, sample from Gaussian)
-            steps: Number of integration steps
-            cfg_scale: Classifier-free guidance scale
-
-        Returns:
-            [B, block_dim] sampled block
-        """
         batch_size = z.shape[0]
         device = z.device
         dtype = z.dtype
