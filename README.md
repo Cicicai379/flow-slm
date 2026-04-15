@@ -1,3 +1,15 @@
+## Flow SLM + Block decoding
+
+```bash
+python trainer_block.py \
+      --conf conf/270m_block.yaml \
+      --save_path /data/cicicai/flow_slm/checkpoints/test_run_block \
+      --override "{'optimizer': {'lr': 1e-5, 'loss_function': 'BLOCK_FM'}, 'training': {'batch_size': 8}}" \
+      --hf_training_data \
+      --training_data "emilia" \
+      --strategy "deepspeed_stage_2" 
+```
+
 
 ## Training
 
