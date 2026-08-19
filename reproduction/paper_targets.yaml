@@ -1,0 +1,63 @@
+paper:
+  title: "Flow-SLM: Joint Learning of Linguistic and Acoustic Information for Spoken Language Modeling"
+  arxiv: "2508.09350"
+
+training:
+  base_data: "parler-tts/mls_eng"
+  base_hours: 44659.74
+  extended_data:
+    - "MLCommons/peoples_speech:clean"
+    - "MLCommons/peoples_speech:clean_sa"
+  extended_additional_hours: 20000
+  epochs: 1
+  global_batch_size: 128
+  optimizer: AdamW8bit
+  future_semantic_tokens: 4
+  cfg_dropout: 0.05
+
+inference:
+  semantic_top_p: 0.95
+  semantic_temperature: 0.8
+  gaussian_temperature: 0.8
+  cfg_scale: 0.3
+  ode_solver: euler
+  ode_nfe: 32
+  silence_logit_penalty: 10
+  mimi_quantizers: 16
+  prompt_seconds: 3
+  continuation_end_seconds: 10
+  continuations_per_prompt: 4
+  prompt_count: 500
+  prompt_manifest: prompts/test_libri.csv
+
+metrics:
+  Flow-SLM-270M:
+    sWUGGY: 68.7
+    sBLIMP: 57.3
+    SALMon_consistency: 70.8
+    SALMon_sentiment_alignment: 60.0
+    SALMon_background_alignment: 55.5
+    genPPL: 173.3
+    speaker_similarity: 0.36
+    emotion2vec_FSD: 3.23
+    WavLM_FSD: 1235.4
+  Flow-SLM-1B:
+    sWUGGY: 69.8
+    sBLIMP: 60.0
+    SALMon_consistency: 71.6
+    SALMon_sentiment_alignment: 57.0
+    SALMon_background_alignment: 56.0
+    genPPL: 147.5
+    speaker_similarity: 0.43
+    emotion2vec_FSD: 2.82
+    WavLM_FSD: 1018.1
+  Flow-SLM-1B-extended:
+    sWUGGY: 65.7
+    sBLIMP: 60.9
+    SALMon_consistency: 71.6
+    SALMon_sentiment_alignment: 57.0
+    SALMon_background_alignment: 53.0
+    genPPL: 137.6
+    speaker_similarity: 0.45
+    emotion2vec_FSD: 2.62
+    WavLM_FSD: 997.9

@@ -1,2 +1,6 @@
 __pycache__/
 .claude/
+artifacts/
+reproduction/logs/
+blockwise/logs/*
+!blockwise/logs/.gitkeep

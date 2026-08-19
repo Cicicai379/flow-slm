@@ -35,6 +35,32 @@ class SpeechDataModule(pl.LightningDataModule):
     def setup(self, stage: Optional[str] = None):
         if stage in (None, "fit"):
             print("set up datasets...")
+            if not self.args.hf_training_data:
+                required = {
+                    "data_dir": self.args.data_dir,
+                    "train_id_file": self.args.train_id_file,
+                    "valid_id_file": self.args.valid_id_file,
+                }
+                missing = [name for name, value in required.items() if not value]
+                if missing:
+                    raise ValueError(
+                        "local training requires " + ", ".join(sorted(missing))
+                    )
+                print(f"using local training data from {self.args.data_dir}")
+                self.train_set = SpeechDataset(
+                    self.args.train_id_file,
+                    self.args.data_dir,
+                    default_sr=self.conf.data.sr,
+                    ext=self.conf.data.ext,
+                )
+                self.val_set = SpeechDataset(
+                    self.args.valid_id_file,
+                    self.args.data_dir,
+                    default_sr=self.conf.data.sr,
+                    ext=self.conf.data.ext,
+                )
+                return
+
             print(f"using {self.args.training_data} training data")
 
 
@@ -64,13 +90,21 @@ class SpeechDataModule(pl.LightningDataModule):
             vad = getattr(self.conf.data, "vad", False)
 
             if self.args.training_data == "MLSEn+people":
-                mls_train_set = HFListDataset(kind="mls", size=size, split="train", vad=vad)
-                people_train_set = HFListDataset(kind="people", split="train")
+                mls_train_set = HFListDataset(
+                    kind="mls", size=size, split="train", sr=self.conf.data.sr, vad=vad
+                )
+                people_train_set = HFListDataset(
+                    kind="people", split="train", sr=self.conf.data.sr
+                )
                 self.train_set = torch.utils.data.ConcatDataset([mls_train_set, people_train_set])
             else:
-                self.train_set = HFListDataset(kind="mls", size=size, split="train", vad=vad)
+                self.train_set = HFListDataset(
+                    kind="mls", size=size, split="train", sr=self.conf.data.sr, vad=vad
+                )
 
-            self.val_set = HFListDataset(kind="mls", size=size, split="dev", vad=vad)
+            self.val_set = HFListDataset(
+                kind="mls", size=size, split="dev", sr=self.conf.data.sr, vad=vad
+            )
 
         if stage in ("predict", "test"):
             self.test_set = SpeechDataset(self.args.predict_id_file, self.args.data_dir,
@@ -295,4 +329,3 @@ def get_dataloader(dataset: Dataset, batch_size: int, shuffle: bool = True, batc
                                  num_workers=num_workers, collate_fn=collate_fn,
                                  pin_memory=True, prefetch_factor=prefetch_factor)
     return data_loader
-

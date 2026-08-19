@@ -1,0 +1,23 @@
+baseline:
+  name: framewise_flow_slm_270m
+  block_size: 1
+
+ablations:
+  block_size: [2, 4, 8, 16]
+  flow_head: [flattened_mlp, intra_block_transformer]
+  solver: [euler]
+  ode_steps: [8, 16, 32]
+
+fixed:
+  backbone: OpenELM-270M
+  acoustic_encoder: kyutai/mimi
+  acoustic_frame_rate_hz: 12.5
+  dataset: MLS-English
+  optimizer: AdamW8bit
+  global_batch_frames: matched_to_framewise_baseline
+  random_seeds: [0, 1, 2]
+
+report:
+  quality: [salmon_consistency, salmon_sentiment, salmon_background, intelligibility]
+  efficiency: [real_time_factor, decoder_calls_per_second_audio, peak_gpu_memory]
+  optimization: [validation_flow_loss, gradient_norm, steps_to_target_loss]

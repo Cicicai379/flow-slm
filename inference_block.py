@@ -87,10 +87,12 @@ class BlockSampler(torch.nn.Module):
             if has_ended.all():
                 break
 
+            # new_block: [B, block_size, feature_dim]
             new_block = self.block_flow_loss.sample(z, steps=ode_steps, temperature=temperature,
                                                     solver=solver, cfg_scale=cfg_scale)
             generated_blocks.append(new_block.to(torch.bfloat16))
-            block_sequence = torch.cat([block_sequence, new_block.unsqueeze(1).to(torch.bfloat16)], dim=1)
+            # block_sequence expects [B, num_blocks, block_dim]; flatten the new block before appending
+            block_sequence = torch.cat([block_sequence, new_block.reshape(B, 1, -1).to(torch.bfloat16)], dim=1)
 
         if not has_ended.all():
             stop_steps[stop_steps == 0] = (num_prompt_blocks + len(generated_blocks)) * self.block_size
@@ -100,7 +102,8 @@ class BlockSampler(torch.nn.Module):
                   torch.zeros(B, 0, self.feature_dim, device=device, dtype=torch.bfloat16)
             return out, stop_steps
 
-        all_gen = torch.stack(generated_blocks, dim=1)  # [B, n_gen, block_dim]
+        # generated_blocks: list of [B, block_size, feature_dim]
+        all_gen = torch.stack(generated_blocks, dim=1)  # [B, n_gen, block_size, feature_dim]
         gen_frames = all_gen.reshape(B, len(generated_blocks) * self.block_size, self.feature_dim)
 
         if prompts is not None:

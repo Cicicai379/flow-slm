@@ -13,7 +13,7 @@ import munch
 import sys
 from pathlib import Path
 from lightning.pytorch.callbacks import ModelCheckpoint, LearningRateMonitor
-from lightning.pytorch.loggers import TensorBoardLogger
+from lightning.pytorch.loggers import TensorBoardLogger, WandbLogger
 from utils import replace_values, writing_output_to_file, SaveAtSpecificStep, select_latest_ckpt
 from lightning.pytorch.plugins.environments import SLURMEnvironment
 from dataset import SpeechDataModule
@@ -42,7 +42,8 @@ class BlockLanguageModeling(pl.LightningModule):
 
             null_prob = 0.0 if not hasattr(self.conf.optimizer, "null_prob") else self.conf.optimizer.null_prob
             self.loss_fn = BlockFlowLoss(
-                block_dim=block_dim,
+                block_size=block_size,
+                feature_dim=feature_dim,
                 z_dim=z_dim,
                 sigma_min=self.conf.optimizer.sigma_min,
                 t_dist=self.conf.optimizer.t_dist,
@@ -111,31 +112,20 @@ class BlockLanguageModeling(pl.LightningModule):
         else:
             return self.gslm_pipeline(wavs, wav_len)
 
-    def _compute_block_flow_loss(self, block_reprs, target_blocks, block_mask):
+    def _compute_block_flow_loss(self, block_reprs, target_blocks, block_frame_mask):
         if getattr(self.conf.optimizer, "loss_weight", 1.0) <= 0:
             return torch.zeros_like(target_blocks[..., 0])
 
         B, num_blocks, block_dim = target_blocks.shape
-        total_loss = torch.zeros(B, num_blocks, device=target_blocks.device, dtype=target_blocks.dtype)
-
-        # Process each block autoregressively
-        for block_idx in range(num_blocks):
-            # Use previous blocks as causal context (teacher forcing during training)
-            if block_idx > 0:
-                # Conditioning includes all previous block representations
-                context_reprs = block_reprs[:, block_idx-1]  # Use previous block as immediate context
-            else:
-                # First block: use null context
-                context_reprs = torch.zeros(B, self.conf.model.decoder_dim, device=target_blocks.device, dtype=target_blocks.dtype)
-
-            # Current target block (flattened)
-            current_target = target_blocks[:, block_idx]  # [B, block_dim]
-
-            # Compute flow loss for this block
-            block_loss = self.loss_fn(context_reprs, current_target)
-            total_loss[:, block_idx] = block_loss.mean(dim=-1)  # Average over block dimensions
-
-        return total_loss
+        block_size = getattr(self.conf.model, "block_size", 8)
+        feature_dim = self.conf.model.ssl_dim * self.conf.model.reduction_factor
+        context_reprs = block_reprs.reshape(B * num_blocks, -1)
+        current_targets = target_blocks.reshape(B * num_blocks, block_size, feature_dim)
+        element_loss = self.loss_fn(context_reprs, current_targets)
+        frame_loss = element_loss.mean(dim=-1).reshape(B, num_blocks, block_size)
+        frame_mask = block_frame_mask.to(frame_loss.dtype)
+        valid_frames = frame_mask.sum(dim=-1).clamp_min(1)
+        return (frame_loss * frame_mask).sum(dim=-1) / valid_frames
 
     def _compute_token_loss(self, token_logits, tokens, token_padding_mask, training: bool):
         if self.conf.optimizer.token_loss_weight <= 0:
@@ -203,10 +193,20 @@ class BlockLanguageModeling(pl.LightningModule):
 
         # run block pipeline
         eval_mode = not self.training
-        block_reprs, target_blocks, block_mask, token_logits, tokens, token_padding_mask = self._run_pipeline(wavs, wav_len, eval_mode)
+        (
+            block_reprs,
+            target_blocks,
+            block_mask,
+            block_frame_mask,
+            token_logits,
+            tokens,
+            token_padding_mask,
+        ) = self._run_pipeline(wavs, wav_len, eval_mode)
 
         # Compute block flow loss
-        block_flow_loss = self._compute_block_flow_loss(block_reprs, target_blocks, block_mask)
+        block_flow_loss = self._compute_block_flow_loss(
+            block_reprs, target_blocks, block_frame_mask
+        )
         token_loss = self._compute_token_loss(token_logits, tokens, token_padding_mask, self.training)
 
         if reduction == "block":
@@ -319,6 +319,12 @@ def main():
     parser.add_argument("--ignore_eos", action="store_true", help="ignore eos token for prediction")
     parser.add_argument("--use_k_future_tokens", default=0, type=int, help="use k future tokens for prediction")
     parser.add_argument("--every_n_steps", help="every n steps, do validation and checkpointing", default=5000, type=int)
+    parser.add_argument("--wandb", action="store_true")
+    parser.add_argument("--wandb_project", default="flow-slm-blockwise")
+    parser.add_argument("--wandb_entity", default=None)
+    parser.add_argument("--wandb_run_name", default=None)
+    parser.add_argument("--wandb_run_id", default=None)
+    parser.add_argument("--wandb_dir", default=None)
     parser.add_argument(
         "--strategy",
         help="ddp strategy",
@@ -387,19 +393,38 @@ def main():
         tb_logger = TensorBoardLogger(save_dir=f"{ckpt_dir}/logs/", version=4)
         print("TensorBoard logs will be written to:", f"{ckpt_dir}/logs/version_4")
         tb_logger.log_hyperparams(conf.toDict())
+        loggers = [tb_logger]
+        if args.wandb:
+            wandb_dir = args.wandb_dir or ckpt_dir
+            os.makedirs(wandb_dir, exist_ok=True)
+            wandb_logger = WandbLogger(
+                project=args.wandb_project,
+                entity=args.wandb_entity,
+                name=args.wandb_run_name,
+                id=args.wandb_run_id,
+                resume="allow" if args.wandb_run_id else None,
+                save_dir=wandb_dir,
+                log_model=False,
+            )
+            wandb_logger.log_hyperparams(conf.toDict())
+            loggers.append(wandb_logger)
+            print(f"Weights & Biases run URL: {wandb_logger.experiment.url}")
         lr_monitor = LearningRateMonitor(logging_interval="step")
         precision = "bf16-mixed" if torch.cuda.is_bf16_supported() else 32
         trainer = pl.Trainer(
             accelerator="gpu",
+            enable_model_summary=False,
             max_steps=conf.training.max_steps,
             callbacks=[checkpoint_callback, save_at_specific_step, lr_monitor],
             val_check_interval=args.every_n_steps,
             check_val_every_n_epoch=None,
-            logger=tb_logger,
+            logger=loggers,
             precision=precision,
             devices="auto",
             strategy=args.strategy,
-            detect_anomaly=True,
+            # Autograd anomaly detection is a debugging aid and adds substantial
+            # synchronization overhead; keep it off for production training.
+            detect_anomaly=False,
 
             # log_every_n_steps=args.every_n_steps,
             log_every_n_steps=10,

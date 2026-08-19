@@ -34,6 +34,7 @@ except ImportError:
         B, T, F = features.shape
         return features.view(B, T * factor, F // factor)
 from transformers import AutoModelForCausalLM
+from blockwise.blocks import pack_blocks, shift_blocks_right
 
 
 class GSLMBlockPipeline(nn.Module):
@@ -48,7 +49,11 @@ class GSLMBlockPipeline(nn.Module):
 
         if hasattr(self.conf.model, "ssl_model") and self.conf.model.ssl_model == "mimi":
             n_quantizers = getattr(self.conf.model, "n_quantizers", 0)
-            self.ssl_model = MimiEncoder(freeze=self.conf.model.freeze, n_quantizers=n_quantizers)
+            self.ssl_model = MimiEncoder(
+                freeze=self.conf.model.freeze,
+                n_quantizers=n_quantizers,
+                input_sample_rate=self.conf.data.sr,
+            )
 
         # Initialize decoder model
         if "OpenELM" in self.conf.model.decoder:
@@ -143,25 +148,9 @@ class GSLMBlockPipeline(nn.Module):
             else:
                 self.token_embed = nn.Embedding(self.ssl_model.model.config.codebook_size, embedding_dim=self.conf.model.token_emb_dim)
     
-    def _split_into_blocks(self, ssl_feats: torch.Tensor, wav_len: torch.Tensor):
-        B, T, F = ssl_feats.shape
-
-        # Pad sequence to be divisible by block_size
-        num_blocks = (T + self.block_size - 1) // self.block_size
-        padded_T = num_blocks * self.block_size
-
-        if padded_T > T:
-            padding = torch.zeros(B, padded_T - T, F, device=ssl_feats.device, dtype=ssl_feats.dtype)
-            ssl_feats = torch.cat([ssl_feats, padding], dim=1)
-
-        # Reshape into blocks: [B, T, F] → [B, num_blocks, block_size, F]
-        blocks = ssl_feats.view(B, num_blocks, self.block_size, F)
-
-        # Create block mask based on sequence lengths
-        block_lengths = torch.ceil(wav_len * T / self.block_size).long()
-        block_mask = torch.arange(num_blocks, device=ssl_feats.device)[None, :] < block_lengths[:, None]
-
-        return blocks, block_mask
+    def _split_into_blocks(self, ssl_feats: torch.Tensor, frame_lengths: torch.Tensor):
+        packed = pack_blocks(ssl_feats, frame_lengths, self.block_size)
+        return packed.values, packed.block_mask, packed.frame_mask
 
     def _get_ssl_feats(self, wavs, wav_len):
         with torch.no_grad():
@@ -241,14 +230,22 @@ class GSLMBlockPipeline(nn.Module):
         reduced_ssl_feats, ssl_feats, ssl_abs_len, tokens = self._get_ssl_feats(wavs, wav_len)
 
         # Split features into blocks for joint modeling
-        blocks, block_mask = self._split_into_blocks(reduced_ssl_feats, wav_len)
+        if self.conf.model.reduction_factor > 1:
+            reduced_abs_len = torch.div(
+                ssl_abs_len, self.conf.model.reduction_factor, rounding_mode="floor"
+            )
+        else:
+            reduced_abs_len = ssl_abs_len
+        blocks, block_mask, block_frame_mask = self._split_into_blocks(
+            reduced_ssl_feats, reduced_abs_len
+        )
         B, num_blocks, block_size, F = blocks.shape
 
         # Flatten each block: [B, num_blocks, block_size, F] → [B, num_blocks, block_size * F]
         target_blocks = blocks.reshape(B, num_blocks, self.block_dim)
 
         # Process blocks autoregressively through LM
-        block_sequence = target_blocks.clone()  # [B, num_blocks, block_dim]
+        block_sequence = shift_blocks_right(target_blocks, self.null_block)
 
         # Get LM representations for each block (conditioned on previous blocks)
         block_reprs, aux_output = self.decoder(block_sequence, attention_mask=block_mask)
@@ -257,4 +254,12 @@ class GSLMBlockPipeline(nn.Module):
         bs = B
         token_logits, tokens, split_padding_mask = self._process_token_predictions(aux_output, wav_len, tokens, bs)
 
-        return block_reprs, target_blocks, block_mask, token_logits, tokens, split_padding_mask
+        return (
+            block_reprs,
+            target_blocks,
+            block_mask,
+            block_frame_mask,
+            token_logits,
+            tokens,
+            split_padding_mask,
+        )

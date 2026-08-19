@@ -147,19 +147,27 @@ class FinalLayer(nn.Module):
 
 
 class BlockFlowNet(nn.Module):
-    """Flow matching network for joint block denoising with adaptive layer normalization."""
+    """Flow matching network for joint block denoising.
+
+    Processes a block of acoustic frames as a sequence [B, block_size, feature_dim]
+    using self-attention for within-block temporal modeling, then applies per-frame
+    ResBlocks conditioned on the diffusion timestep and LM representation.
+    """
 
     def __init__(
         self,
-        block_dim: int,  # block_size * feature_dim (flattened block dimension)
+        block_size: int,       # number of acoustic frames per block
+        feature_dim: int,      # dimension of each acoustic frame
         model_channels: int,
-        z_channels: int,  # conditioning dimension from LM
+        z_channels: int,       # conditioning dimension from LM
         num_res_blocks: int,
+        num_attn_heads: int = 8,
         grad_checkpointing: bool = False
     ):
         super().__init__()
 
-        self.block_dim = block_dim
+        self.block_size = block_size
+        self.feature_dim = feature_dim
         self.model_channels = model_channels
         self.num_res_blocks = num_res_blocks
         self.grad_checkpointing = grad_checkpointing
@@ -167,22 +175,22 @@ class BlockFlowNet(nn.Module):
         self.time_embed = TimestepEmbedder(model_channels)
         self.cond_embed = nn.Linear(z_channels, model_channels)
 
-        # Project flattened noisy block to model dimension
-        self.input_proj = nn.Linear(block_dim, model_channels)
+        # Project each frame independently to model dimension
+        self.frame_proj = nn.Linear(feature_dim, model_channels)
 
-        res_blocks = []
-        for i in range(num_res_blocks):
-            res_blocks.append(ResBlock(model_channels))
+        # Self-attention across frames within the block for temporal modeling
+        self.attn_norm = nn.LayerNorm(model_channels)
+        self.attn = nn.MultiheadAttention(model_channels, num_heads=num_attn_heads, batch_first=True)
 
-        self.res_blocks = nn.ModuleList(res_blocks)
+        # Per-frame ResBlocks with adaptive conditioning from t + z
+        self.res_blocks = nn.ModuleList([ResBlock(model_channels) for _ in range(num_res_blocks)])
 
-        # Output back to flattened block space for joint prediction
-        self.final_layer = FinalLayer(model_channels, block_dim)
+        # Per-frame output projection back to feature_dim
+        self.final_layer = FinalLayer(model_channels, feature_dim)
 
         self.initialize_weights()
 
     def initialize_weights(self):
-        """Initialize model weights."""
         def _basic_init(module):
             if isinstance(module, nn.Linear):
                 torch.nn.init.xavier_uniform_(module.weight)
@@ -190,45 +198,43 @@ class BlockFlowNet(nn.Module):
                     nn.init.constant_(module.bias, 0)
         self.apply(_basic_init)
 
-        # Initialize timestep embedding MLP
         nn.init.normal_(self.time_embed.mlp[0].weight, std=0.02)
         nn.init.normal_(self.time_embed.mlp[2].weight, std=0.02)
 
-        # Zero-out adaLN modulation layers
         for block in self.res_blocks:
             nn.init.constant_(block.adaLN_modulation[-1].weight, 0)
             nn.init.constant_(block.adaLN_modulation[-1].bias, 0)
 
-        # Zero-out output layers
         nn.init.constant_(self.final_layer.adaLN_modulation[-1].weight, 0)
         nn.init.constant_(self.final_layer.adaLN_modulation[-1].bias, 0)
         nn.init.constant_(self.final_layer.linear.weight, 0)
         nn.init.constant_(self.final_layer.linear.bias, 0)
 
     def forward(self, x: torch.Tensor, t: torch.Tensor, c: torch.Tensor) -> torch.Tensor:
-        weight_dtype = self.input_proj.weight.dtype
+        # x: [B, block_size, feature_dim]
+        # t: [B]
+        # c: [B, z_channels]
+        weight_dtype = self.frame_proj.weight.dtype
         x = x.to(weight_dtype)
         t = t.to(weight_dtype)
         c = c.to(weight_dtype)
-        x = self.input_proj(x)  # [B, block_dim] → [B, model_channels]
-        t = self.time_embed(t.unsqueeze(1))  # [B] → [B, 1, model_channels]
-        t = t.squeeze(1)  # [B, model_channels]
-        c = self.cond_embed(c)  # [B, z_channels] → [B, model_channels]
 
-        y = t + c  # [B, model_channels]
+        x = self.frame_proj(x)                           # [B, block_size, model_channels]
+        t_emb = self.time_embed(t.unsqueeze(1)).squeeze(1)  # [B, model_channels]
+        c_emb = self.cond_embed(c)                        # [B, model_channels]
+        y = t_emb + c_emb                                 # [B, model_channels]
 
-        if self.grad_checkpointing and not torch.jit.is_scripting():
-            from torch.utils.checkpoint import checkpoint
-            for block in self.res_blocks:
-                x = checkpoint(block, x, y.unsqueeze(1))
-                x = x.squeeze(1)
-        else:
-            for block in self.res_blocks:
-                x = block(x.unsqueeze(1), y.unsqueeze(1))  # Add sequence dim for ResBlock
-                x = x.squeeze(1)  # Remove sequence dim
+        # Self-attention across frames to capture within-block temporal dependencies
+        x_norm = self.attn_norm(x)
+        attn_out, _ = self.attn(x_norm, x_norm, x_norm)
+        x = x + attn_out                                  # [B, block_size, model_channels]
 
-        out = self.final_layer(x.unsqueeze(1), y.unsqueeze(1))  # Add sequence dim
-        out = out.squeeze(1)  # [B, block_dim]
+        # Per-frame ResBlocks; y is broadcast via unsqueeze: [B, 1, model_channels]
+        for block in self.res_blocks:
+            x = block(x, y.unsqueeze(1))
+
+        # Per-frame output: [B, block_size, feature_dim]
+        out = self.final_layer(x, y.unsqueeze(1))
         return out
 
 

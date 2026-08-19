@@ -16,7 +16,11 @@ class GSLMPipeline(nn.Module):
         
         if hasattr(self.conf.model, "ssl_model") and self.conf.model.ssl_model == "mimi":
             n_quantizers = getattr(self.conf.model, "n_quantizers", 0)
-            self.ssl_model = MimiEncoder(freeze=self.conf.model.freeze, n_quantizers=n_quantizers)
+            self.ssl_model = MimiEncoder(
+                freeze=self.conf.model.freeze,
+                n_quantizers=n_quantizers,
+                input_sample_rate=self.conf.data.sr,
+            )
 
         # Initialize decoder model
         if "OpenELM" in self.conf.model.decoder:

@@ -17,10 +17,15 @@ logger = logging.getLogger(__name__)
 class MimiEncoder(torch.nn.Module):
     """Mimi encoder for speech representation learning."""
 
-    def __init__(self, freeze: bool = True, n_quantizers: int = 0):
+    def __init__(self, freeze: bool = True, n_quantizers: int = 0,
+                 input_sample_rate: int = 24000):
         super().__init__()
         self.model = MimiModel.from_pretrained("kyutai/mimi")
         self.feature_extractor = AutoFeatureExtractor.from_pretrained("kyutai/mimi")
+        self.resample = (
+            torchaudio.transforms.Resample(orig_freq=input_sample_rate, new_freq=24000)
+            if input_sample_rate != 24000 else None
+        )
         self.freeze = freeze
         self.n_quantizers = n_quantizers
 
@@ -42,6 +47,8 @@ class MimiEncoder(torch.nn.Module):
         """
         context = torch.no_grad() if self.freeze else nullcontext()
         with context:
+            if self.resample is not None:
+                wavs = self.resample(wavs)
             embeddings = self.model.encoder(wavs.unsqueeze(dim=1))
             encoder_outputs = self.model.encoder_transformer(
                 embeddings.transpose(1, 2), past_key_values=None, return_dict=None
@@ -466,4 +473,3 @@ class SPIDREncoder(torch.nn.Module):
 
         feats = None  # we don't use SPIDR features
         return feats, tokens
-

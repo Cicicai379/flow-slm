@@ -20,7 +20,7 @@ import munch
 import sys
 from pathlib import Path
 from lightning.pytorch.callbacks import ModelCheckpoint, LearningRateMonitor
-from lightning.pytorch.loggers import TensorBoardLogger
+from lightning.pytorch.loggers import TensorBoardLogger, WandbLogger
 from utils import replace_values, writing_output_to_file, SaveAtSpecificStep, select_latest_ckpt
 from lightning.pytorch.plugins.environments import SLURMEnvironment
 from dataset import SpeechDataModule
@@ -318,6 +318,12 @@ def main():
     parser.add_argument("--ignore_eos", action="store_true", help="ignore eos token for prediction")
     parser.add_argument("--use_k_future_tokens", default=0, type=int, help="use k future tokens for prediction")
     parser.add_argument("--every_n_steps", help="every n steps, do validation and checkpointing", default=5000, type=int)
+    parser.add_argument("--wandb", action="store_true", help="log training and validation metrics to Weights & Biases")
+    parser.add_argument("--wandb_project", default="flow-slm-paper-reproduction", help="Weights & Biases project")
+    parser.add_argument("--wandb_entity", default=None, help="Weights & Biases team/entity")
+    parser.add_argument("--wandb_run_name", default=None, help="Weights & Biases run name")
+    parser.add_argument("--wandb_run_id", default=None, help="stable W&B run ID for resume/requeue")
+    parser.add_argument("--wandb_dir", default=None, help="node-local directory for W&B run files")
     parser.add_argument(
         "--strategy",
         help="ddp strategy",
@@ -386,19 +392,42 @@ def main():
         tb_logger = TensorBoardLogger(save_dir=f"{ckpt_dir}/logs/", version=4)
         print("TensorBoard logs will be written to:", f"{ckpt_dir}/logs/version_4")
         tb_logger.log_hyperparams(conf.toDict())
+        loggers = [tb_logger]
+        if args.wandb:
+            wandb_dir = args.wandb_dir or ckpt_dir
+            os.makedirs(wandb_dir, exist_ok=True)
+            wandb_logger = WandbLogger(
+                project=args.wandb_project,
+                entity=args.wandb_entity,
+                name=args.wandb_run_name,
+                id=args.wandb_run_id,
+                resume="allow" if args.wandb_run_id else None,
+                save_dir=wandb_dir,
+                log_model=False,
+            )
+            wandb_logger.log_hyperparams(conf.toDict())
+            loggers.append(wandb_logger)
+            print(
+                f"Weights & Biases logging enabled: project={args.wandb_project}, "
+                f"entity={args.wandb_entity or '<default>'}, run={args.wandb_run_name or '<auto>'}"
+            )
+            print(f"Weights & Biases run URL: {wandb_logger.experiment.url}")
         lr_monitor = LearningRateMonitor(logging_interval="step")
         precision = "bf16-mixed" if torch.cuda.is_bf16_supported() else 32
         trainer = pl.Trainer(
             accelerator="gpu",
+            enable_model_summary=False,
             max_steps=conf.training.max_steps,
             callbacks=[checkpoint_callback, save_at_specific_step, lr_monitor],
             val_check_interval=args.every_n_steps,
             check_val_every_n_epoch=None,
-            logger=tb_logger,
+            logger=loggers,
             precision=precision,
             devices="auto",
             strategy=args.strategy,
-            detect_anomaly=True,
+            # Autograd anomaly detection is a debugging aid and adds substantial
+            # synchronization overhead; keep it off for production training.
+            detect_anomaly=False,
 
             # log_every_n_steps=args.every_n_steps,
             log_every_n_steps=10,

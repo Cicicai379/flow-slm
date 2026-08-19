@@ -1,0 +1,47 @@
+model:
+  freeze: true
+  ssl_model: mimi
+  n_quantizers: 1
+  decoder: OpenELM-270M
+  flash_attention: true
+  ssl_dim: 512
+  decoder_dim: 1280
+  reduction_factor: 1
+  n_special_tokens: 12
+  add_special_token_to_embedding_table: true
+  token_emb_dim: 0
+  n_res_blocks: 6
+  token_conditioning: false
+  future_conditioning: false
+  norm: static
+  mean_path: statistics/mimi_mean.npy
+  std_path: statistics/mimi_std.npy
+  extra_future_tokens: 0
+  block_size: 8
+
+optimizer:
+  name: AdamW8bit
+  lr: 0.0005
+  loss_function: BLOCK_FM
+  betas: [0.9, 0.98]
+  eps: 1.0E-6
+  weight_decay: 0.01
+  null_prob: 0.05
+  loss_weight: 1.0
+  token_loss_weight: 0.0
+  sigma_min: 1.0E-5
+  t_dist: logit_normal
+  percentile_clipping: 60
+
+data:
+  sr: 16000
+  ext: flac
+  vad: true
+
+training:
+  batch_size: 4
+  num_workers: 4
+  accumulate_grad_batches: 8
+  num_warmup_steps: 5000
+  max_steps: 85000
+  min_lr_ratio: 0.1
