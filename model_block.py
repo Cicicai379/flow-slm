@@ -16,14 +16,18 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+MIMI_REVISION = "89091b3e466eb6a9d11e537bf26b144f194978f7"
+
 
 class MimiEncoder(torch.nn.Module):
     """Mimi encoder for speech representation learning."""
 
     def __init__(self, freeze: bool = True, n_quantizers: int = 0):
         super().__init__()
-        self.model = MimiModel.from_pretrained("kyutai/mimi")
-        self.feature_extractor = AutoFeatureExtractor.from_pretrained("kyutai/mimi")
+        self.model = MimiModel.from_pretrained("kyutai/mimi", revision=MIMI_REVISION)
+        self.feature_extractor = AutoFeatureExtractor.from_pretrained(
+            "kyutai/mimi", revision=MIMI_REVISION
+        )
         self.freeze = freeze
         self.n_quantizers = n_quantizers
 
@@ -56,7 +60,7 @@ class MimiDecoder(torch.nn.Module):
 
     def __init__(self):
         super().__init__()
-        self.model = MimiModel.from_pretrained("kyutai/mimi")
+        self.model = MimiModel.from_pretrained("kyutai/mimi", revision=MIMI_REVISION)
 
     def forward(self, embeddings: torch.Tensor, num_quantizers: Optional[int] = None, return_codes: bool = False) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         num_quantizers = self.model.config.num_quantizers if num_quantizers is None else num_quantizers
@@ -415,4 +419,3 @@ class ELMBlockDecoderWrapper(BaseDecoderWrapper):
 
 #         feats = None  # we don't use SPIDR features
 #         return feats, tokens
-

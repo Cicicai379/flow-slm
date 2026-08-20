@@ -155,6 +155,7 @@ def parse_args():
     parser.add_argument("--save_transcription", action="store_true")
     parser.add_argument("--num_quantizers", type=int, default=16)
     parser.add_argument("--sr", type=int, default=24000)
+    parser.add_argument("--seed", type=int, default=0)
     return parser.parse_args()
 
 
@@ -168,10 +169,11 @@ def load_conf(conf_path):
 def load_model(args, conf, device="cuda"):
     model_args = type("Args", (), {})()
     lm = LanguageModeling(model_args, conf)
-    state_dict = torch.load(args.ckpt_path, map_location="cpu")
+    state_dict = torch.load(args.ckpt_path, map_location="cpu", weights_only=False)
     if "epoch" in state_dict:
         state_dict = state_dict["state_dict"]
-    lm.load_state_dict(state_dict, strict=False)
+    incompatible = lm.load_state_dict(state_dict, strict=True)
+    print(f"strict checkpoint load: {incompatible}", flush=True)
     lm = lm.to(device).to(torch.bfloat16)
     return lm
 
@@ -228,6 +230,7 @@ def run_conditional(args, sampler, processor, prompt_wavs):
 
 def main():
     args = parse_args()
+    pl.seed_everything(args.seed, workers=True)
     conf = load_conf(args.conf_path)
     device = "cuda" if torch.cuda.is_available() else "cpu"
 

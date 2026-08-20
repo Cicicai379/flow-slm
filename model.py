@@ -13,6 +13,8 @@ from model_utils import modulate
 
 logger = logging.getLogger(__name__)
 
+MIMI_REVISION = "89091b3e466eb6a9d11e537bf26b144f194978f7"
+
 
 class MimiEncoder(torch.nn.Module):
     """Mimi encoder for speech representation learning."""
@@ -20,8 +22,10 @@ class MimiEncoder(torch.nn.Module):
     def __init__(self, freeze: bool = True, n_quantizers: int = 0,
                  input_sample_rate: int = 24000):
         super().__init__()
-        self.model = MimiModel.from_pretrained("kyutai/mimi")
-        self.feature_extractor = AutoFeatureExtractor.from_pretrained("kyutai/mimi")
+        self.model = MimiModel.from_pretrained("kyutai/mimi", revision=MIMI_REVISION)
+        self.feature_extractor = AutoFeatureExtractor.from_pretrained(
+            "kyutai/mimi", revision=MIMI_REVISION
+        )
         self.resample = (
             torchaudio.transforms.Resample(orig_freq=input_sample_rate, new_freq=24000)
             if input_sample_rate != 24000 else None
@@ -69,7 +73,7 @@ class MimiDecoder(torch.nn.Module):
 
     def __init__(self):
         super().__init__()
-        self.model = MimiModel.from_pretrained("kyutai/mimi")
+        self.model = MimiModel.from_pretrained("kyutai/mimi", revision=MIMI_REVISION)
 
     def forward(self, embeddings: torch.Tensor, num_quantizers: Optional[int] = None, return_codes: bool = False) -> Union[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]:
         """Decode Mimi embeddings to audio.

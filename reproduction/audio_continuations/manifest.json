@@ -1,0 +1,88 @@
+{
+  "files": [
+    {
+      "all_finite": true,
+      "channels": 1,
+      "clipped_fraction": 0.0,
+      "duration_seconds": 10.0,
+      "file": "block8/dev-clean_1462_170142_1462-170142-0001_0000.wav",
+      "model": "block8",
+      "peak_absolute": 0.9140625,
+      "rms": 0.0858418270945549,
+      "sample_rate_hz": 24000,
+      "samples": 240000
+    },
+    {
+      "all_finite": true,
+      "channels": 1,
+      "clipped_fraction": 0.0,
+      "duration_seconds": 10.0,
+      "file": "block8/dev-clean_2277_149897_2277-149897-0018_0000.wav",
+      "model": "block8",
+      "peak_absolute": 0.54296875,
+      "rms": 0.06953692436218262,
+      "sample_rate_hz": 24000,
+      "samples": 240000
+    },
+    {
+      "all_finite": true,
+      "channels": 1,
+      "clipped_fraction": 0.0,
+      "duration_seconds": 10.0,
+      "file": "block8/dev-clean_7850_286674_7850-286674-0000_0000.wav",
+      "model": "block8",
+      "peak_absolute": 0.625,
+      "rms": 0.07863523066043854,
+      "sample_rate_hz": 24000,
+      "samples": 240000
+    },
+    {
+      "all_finite": true,
+      "channels": 1,
+      "clipped_fraction": 0.0,
+      "duration_seconds": 10.0,
+      "file": "original/dev-clean_1462_170142_1462-170142-0001_0000.wav",
+      "model": "original",
+      "peak_absolute": 0.58203125,
+      "rms": 0.06941539794206619,
+      "sample_rate_hz": 24000,
+      "samples": 240000
+    },
+    {
+      "all_finite": true,
+      "channels": 1,
+      "clipped_fraction": 0.0,
+      "duration_seconds": 10.0,
+      "file": "original/dev-clean_2277_149897_2277-149897-0018_0000.wav",
+      "model": "original",
+      "peak_absolute": 0.54296875,
+      "rms": 0.04236682876944542,
+      "sample_rate_hz": 24000,
+      "samples": 240000
+    },
+    {
+      "all_finite": true,
+      "channels": 1,
+      "clipped_fraction": 0.0,
+      "duration_seconds": 10.0,
+      "file": "original/dev-clean_7850_286674_7850-286674-0000_0000.wav",
+      "model": "original",
+      "peak_absolute": 0.625,
+      "rms": 0.0731445923447609,
+      "sample_rate_hz": 24000,
+      "samples": 240000
+    }
+  ],
+  "generation": {
+    "cfg_scale": 0.3,
+    "flow_temperature": 0.8,
+    "ode_steps": 32,
+    "prompt_seconds": 3.0,
+    "seed": 20260820,
+    "solver": "euler",
+    "token_temperature": 0.8,
+    "top_p": 0.95,
+    "total_seconds": 10.0
+  },
+  "source": "/data/cicicai/flow_slm/evaluation/audio/smoke"
+}

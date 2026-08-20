@@ -45,8 +45,7 @@ class BlockSampler(torch.nn.Module):
                token_temperature=1.0, temperature=1.0, prompts=None,
                solver="euler", eos_aux_token=None, cfg_scale=0.3,
                topp=0.95, penalize_silence=False, penalize_weight=10.0):
-        max_infer_frames = round(max_len * self.frame_rate / self.reduction_factor)
-        max_infer_blocks = (max_infer_frames + self.block_size - 1) // self.block_size
+        max_total_frames = round(max_len * self.frame_rate / self.reduction_factor)
 
         if prompts is not None:
             B = prompts.shape[0]
@@ -57,12 +56,27 @@ class BlockSampler(torch.nn.Module):
             if padded_T > T_prompt:
                 pad = torch.zeros(B, padded_T - T_prompt, self.feature_dim, device=device, dtype=torch.bfloat16)
                 padded = torch.cat([padded, pad], dim=1)
-            block_sequence = padded.reshape(B, num_prompt_blocks, self.block_dim)
+            prompt_blocks = padded.reshape(B, num_prompt_blocks, self.block_dim)
+            # Training uses [null, block_0, ..., block_{n-1}] as the causal
+            # inputs whose final position predicts the next block. Preserve
+            # that exact alignment during prompted decoding.
+            null = self.gslm_pipeline.null_block.detach().unsqueeze(0).unsqueeze(0).expand(B, 1, -1)
+            block_sequence = torch.cat(
+                [null.to(device=device, dtype=torch.bfloat16), prompt_blocks], dim=1
+            )
+            prompt_frames = T_prompt
         else:
             B = batch_size
-            num_prompt_blocks = 1
+            num_prompt_blocks = 0
             null = self.gslm_pipeline.null_block.detach().unsqueeze(0).unsqueeze(0).expand(B, 1, -1)
             block_sequence = null.to(device).to(torch.bfloat16)
+            prompt_frames = 0
+
+        # Match the original sampler: max_len is the total waveform duration,
+        # including a prompt. A final partial block is generated in full and
+        # trimmed by stop_steps after vocoding.
+        max_new_frames = max(0, max_total_frames - prompt_frames)
+        max_infer_blocks = (max_new_frames + self.block_size - 1) // self.block_size
 
         has_ended = torch.zeros(B, dtype=torch.bool, device=device)
         stop_steps = torch.zeros(B, dtype=torch.int32, device=device)
@@ -81,7 +95,7 @@ class BlockSampler(torch.nn.Module):
                                             penalize_silence=penalize_silence, penalize_weight=penalize_weight)
                 is_eos = tokens.squeeze(1) == eos_aux_token
                 end_at_this_step = is_eos & (stop_steps == 0)
-                stop_steps[end_at_this_step] = (num_prompt_blocks + block_idx) * self.block_size
+                stop_steps[end_at_this_step] = prompt_frames + block_idx * self.block_size
                 has_ended |= end_at_this_step
 
             if has_ended.all():
@@ -95,7 +109,10 @@ class BlockSampler(torch.nn.Module):
             block_sequence = torch.cat([block_sequence, new_block.reshape(B, 1, -1).to(torch.bfloat16)], dim=1)
 
         if not has_ended.all():
-            stop_steps[stop_steps == 0] = (num_prompt_blocks + len(generated_blocks)) * self.block_size
+            generated_end = min(
+                max_total_frames, prompt_frames + len(generated_blocks) * self.block_size
+            )
+            stop_steps[stop_steps == 0] = generated_end
 
         if not generated_blocks:
             out = prompts.to(device).to(torch.bfloat16) if prompts is not None else \
@@ -117,10 +134,11 @@ class BlockSampler(torch.nn.Module):
 def load_model(args, conf, device="cuda"):
     model_args = type("Args", (), {})()
     lm = BlockLanguageModeling(model_args, conf)
-    state_dict = torch.load(args.ckpt_path, map_location="cpu")
+    state_dict = torch.load(args.ckpt_path, map_location="cpu", weights_only=False)
     if "epoch" in state_dict:
         state_dict = state_dict["state_dict"]
-    lm.load_state_dict(state_dict, strict=False)
+    incompatible = lm.load_state_dict(state_dict, strict=True)
+    print(f"strict checkpoint load: {incompatible}", flush=True)
     lm = lm.to(device).to(torch.bfloat16)
     return lm
 
@@ -209,11 +227,15 @@ def parse_args():
     parser.add_argument("--save_transcription", action="store_true")
     parser.add_argument("--num_quantizers", type=int, default=16)
     parser.add_argument("--sr", type=int, default=24000)
+    parser.add_argument("--seed", type=int, default=0)
     return parser.parse_args()
 
 
 def main():
     args = parse_args()
+    torch.manual_seed(args.seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(args.seed)
     conf = load_conf(args.conf_path)
     device = "cuda" if torch.cuda.is_available() else "cpu"
 

@@ -34,6 +34,11 @@ except ImportError:
         B, T, F = features.shape
         return features.view(B, T * factor, F // factor)
 from transformers import AutoModelForCausalLM
+
+OPENELM_REVISIONS = {
+    "apple/OpenELM-270M": "e2b9003235d55a404567faf06e74883081c65e65",
+    "apple/OpenELM-1_1B": "ee559a10b14895dde9f8cfde3fdc77b3ff0dbc0f",
+}
 from blockwise.blocks import pack_blocks, shift_blocks_right
 
 
@@ -66,7 +71,8 @@ class GSLMBlockPipeline(nn.Module):
         decoder_model = AutoModelForCausalLM.from_pretrained(
             model_name,
             torch_dtype=dtype,
-            trust_remote_code=True
+            trust_remote_code=True,
+            revision=OPENELM_REVISIONS[model_name],
         )
 
         self._init_normalization()

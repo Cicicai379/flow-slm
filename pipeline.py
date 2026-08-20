@@ -7,6 +7,10 @@ from model import MimiEncoder, ELMDecoderWrapper
 from model_utils import reduce_features, split_features
 from transformers import AutoModelForCausalLM
 
+OPENELM_REVISIONS = {
+    "apple/OpenELM-270M": "e2b9003235d55a404567faf06e74883081c65e65",
+    "apple/OpenELM-1_1B": "ee559a10b14895dde9f8cfde3fdc77b3ff0dbc0f",
+}
 
 class GSLMPipeline(nn.Module):
     def __init__(self, conf, args):
@@ -33,7 +37,8 @@ class GSLMPipeline(nn.Module):
         decoder_model = AutoModelForCausalLM.from_pretrained(
             model_name,
             torch_dtype=dtype,
-            trust_remote_code=True
+            trust_remote_code=True,
+            revision=OPENELM_REVISIONS[model_name],
         )
 
         # Initialize normalization (moved to helper)
