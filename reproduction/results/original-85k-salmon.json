@@ -1,0 +1,47 @@
+{
+  "checkpoint": "/data/cicicai/flow_slm/evaluation/exports/original-85k/pytorch_model.bin",
+  "mc_samples": 1,
+  "model": "original",
+  "parts": {
+    "bg_alignment": {
+      "accuracy_percent": 54.500001668930054,
+      "pairs": 200
+    },
+    "bg_all_consistency": {
+      "accuracy_percent": 66.50000214576721,
+      "pairs": 200
+    },
+    "bg_domain_consistency": {
+      "accuracy_percent": 67.00000166893005,
+      "pairs": 200
+    },
+    "gender_consistency": {
+      "accuracy_percent": 80.0000011920929,
+      "pairs": 200
+    },
+    "rir_consistency": {
+      "accuracy_percent": 79.50000166893005,
+      "pairs": 200
+    },
+    "sentiment_alignment": {
+      "accuracy_percent": 54.500001668930054,
+      "pairs": 200
+    },
+    "sentiment_consistency": {
+      "accuracy_percent": 64.49999809265137,
+      "pairs": 200
+    },
+    "speaker_consistency": {
+      "accuracy_percent": 76.49999856948853,
+      "pairs": 200
+    }
+  },
+  "salmon_revision": "9aea707934240138d01cfc1b6f9ed7cb608d99d5",
+  "score_type": "semantic_token_log_likelihood",
+  "seed": 20260820,
+  "summary": {
+    "background_alignment_percent": 54.500001668930054,
+    "consistency_percent": 72.33333388964336,
+    "sentiment_alignment_percent": 54.500001668930054
+  }
+}

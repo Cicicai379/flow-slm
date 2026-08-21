@@ -1,0 +1,47 @@
+{
+  "checkpoint": "/data/cicicai/flow_slm/evaluation/exports/block8-85k/pytorch_model.bin",
+  "mc_samples": 4,
+  "model": "block8",
+  "parts": {
+    "bg_alignment": {
+      "accuracy_percent": 50.999999046325684,
+      "pairs": 200
+    },
+    "bg_all_consistency": {
+      "accuracy_percent": 57.999998331069946,
+      "pairs": 200
+    },
+    "bg_domain_consistency": {
+      "accuracy_percent": 67.5000011920929,
+      "pairs": 200
+    },
+    "gender_consistency": {
+      "accuracy_percent": 50.49999952316284,
+      "pairs": 200
+    },
+    "rir_consistency": {
+      "accuracy_percent": 79.00000214576721,
+      "pairs": 200
+    },
+    "sentiment_alignment": {
+      "accuracy_percent": 49.000000953674316,
+      "pairs": 200
+    },
+    "sentiment_consistency": {
+      "accuracy_percent": 51.499998569488525,
+      "pairs": 200
+    },
+    "speaker_consistency": {
+      "accuracy_percent": 49.000000953674316,
+      "pairs": 200
+    }
+  },
+  "salmon_revision": "9aea707934240138d01cfc1b6f9ed7cb608d99d5",
+  "score_type": "mc_flow_matching_loss_preference_proxy_not_paper_comparable",
+  "seed": 20260820,
+  "summary": {
+    "background_alignment_percent": 50.999999046325684,
+    "consistency_percent": 59.25000011920929,
+    "sentiment_alignment_percent": 49.000000953674316
+  }
+}

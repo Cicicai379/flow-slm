@@ -1,8 +1,13 @@
 # Flow-SLM Reproduction and Blockwise Flow-Matching Report
 
-**Report date:** 2026-08-20  
-**Repository:** <https://github.com/Cicicai379/flow-slm>  
-**Code snapshot:** [`8173f24`](https://github.com/Cicicai379/flow-slm/commit/8173f24)  
+**Report date:** 2026-08-20
+
+**Repository:** <https://github.com/Cicicai379/flow-slm>
+
+**Evaluation-code snapshot:** [`20384c2`](https://github.com/Cicicai379/flow-slm/commit/20384c2)
+
+**Versioned audio snapshot:** [`79557c4`](https://github.com/Cicicai379/flow-slm/commit/79557c4)
+
 **Operator / Slurm user:** `cicicai`
 
 ## Executive summary
@@ -20,10 +25,17 @@ Two models were trained on the full MLS-English training split:
 
 Both production jobs completed successfully with exit code `0:0`, wrote final
 DeepSpeed checkpoints, and logged online to W&B. The original training protocol
-has therefore been reproduced operationally. The paper's complete downstream
-metric table has **not** yet been reproduced: the newly trained original model
-still needs checkpoint export and evaluation on SALMon, sWUGGY, sBLIMP, and the
-generation metrics.
+has therefore been reproduced operationally. We also exported and strictly
+loaded both final checkpoints, completed the public likelihood-based downstream
+suite (sWUGGY, sBLIMP, and SALMon), and generated matched audio continuations.
+
+Our self-trained original model exceeded the paper's sWUGGY, sBLIMP, and SALMon
+consistency values, but missed SALMon sentiment alignment by 5.50 points and
+background alignment by 1.00 point. It is therefore an operational training
+reproduction with strong downstream results, **not an exact reproduction of
+every paper metric**. The repository does not include the paper's complete
+genPPL, speaker-similarity, emotion2vec-FSD, or WavLM-FSD evaluator pipelines;
+those four generation scores remain unexecuted rather than estimated.
 
 An earlier SALMon evaluation used the **authors' released checkpoint only** as
 a compatibility/evaluator baseline. Those scores must not be attributed to our
@@ -172,28 +184,79 @@ The directory modification time for a DeepSpeed `last.ckpt` directory can look
 old even when its internal shard files are current; inspect the files inside
 `last.ckpt/checkpoint/` when checking freshness.
 
-## Paper targets and evaluation status
+### Evaluation exports
+
+Job `3468448` consolidated both final DeepSpeed checkpoints into ordinary
+PyTorch state dictionaries on Lorax-local storage:
+
+| Model | Export | Size | Load verification |
+|---|---|---:|---|
+| Original 85k | `/data/cicicai/flow_slm/evaluation/exports/original-85k/pytorch_model.bin` | 2,261,544,571 bytes | Strict load passed |
+| Block-8 85k | `/data/cicicai/flow_slm/evaluation/exports/block8-85k/pytorch_model.bin` | 2,339,145,259 bytes | Strict load passed |
+
+The evaluators and audio-generation jobs each performed their own strict load;
+no missing or unexpected learned keys were silently accepted.
+
+## Downstream evaluation results
 
 The reference values below are from the Flow-SLM-270M row recorded in
 [`paper_targets.yaml`](paper_targets.yaml).
 
-| Metric | Paper Flow-SLM-270M | Authors' released checkpoint measured here | Our newly trained checkpoint |
-|---|---:|---:|---|
-| sWUGGY | 68.7 | Not run | Not run |
-| sBLIMP | 57.3 | Not run | Not run |
-| SALMon consistency | 70.8 | 66.4 | Not run |
-| SALMon sentiment alignment | 60.0 | 58.5 | Not run |
-| SALMon background alignment | 55.5 | 54.0 | Not run |
-| genPPL | 173.3 | Not run | Not run |
-| Speaker similarity | 0.36 | Not run | Not run |
-| emotion2vec FSD | 3.23 | Not run | Not run |
-| WavLM FSD | 1235.4 | Not run | Not run |
+| Metric | Paper Flow-SLM-270M | Released checkpoint baseline | Our trained original 85k | Difference from paper |
+|---|---:|---:|---:|---:|
+| sWUGGY test | 68.7 | Not run | **69.99** | **+1.29** |
+| sBLIMP test | 57.3 | Not run | **59.63** | **+2.33** |
+| SALMon consistency | 70.8 | 66.4 | **72.33** | **+1.53** |
+| SALMon sentiment alignment | 60.0 | 58.5 | **54.50** | **-5.50** |
+| SALMon background alignment | 55.5 | 54.0 | **54.50** | **-1.00** |
+| genPPL | 173.3 | Not run | Not run | N/A |
+| Speaker similarity | 0.36 | Not run | Not run | N/A |
+| emotion2vec FSD | 3.23 | Not run | Not run | N/A |
+| WavLM FSD | 1235.4 | Not run | Not run | N/A |
 
-For the three released-checkpoint SALMon numbers, the differences from the
-paper are `-4.4`, `-1.5`, and `-1.5` percentage points respectively. The
-evaluation used semantic token likelihood only, excluded CFM likelihood as
-described by the paper, used BF16 autocast, and pinned the SALMon dataset to
-revision `9aea707934240138d01cfc1b6f9ed7cb608d99d5`.
+The sWUGGY/sBLIMP values above use the exact ZeroSpeech 2021 test split:
+40,000 lexical pairs and 63,000 syntactic pairs. sBLIMP is the official
+pair-weighted score. Scoring formulas were pinned to ZeroSpeech toolkit commit
+`199624adfba52901bab564b076fe7d4a63f47ddb`. Semantic token log likelihood was
+used, matching the paper's evaluation protocol and excluding CFM likelihood.
+
+As a split-level cross-check, the original model obtained **70.13% sWUGGY** and
+**59.52% sBLIMP** on development. The comparable paper ablation values are
+68.3% and 57.1%, differences of +1.83 and +2.42 points respectively.
+
+Raw results:
+
+- [`results/original-85k-zerospeech-test.json`](results/original-85k-zerospeech-test.json)
+- [`results/original-85k-zerospeech-dev.json`](results/original-85k-zerospeech-dev.json)
+- [`results/original-85k-salmon.json`](results/original-85k-salmon.json)
+
+SALMon covered all eight released partitions (200 pairs each), used BF16
+autocast, and pinned the dataset to revision
+`9aea707934240138d01cfc1b6f9ed7cb608d99d5`. Consistency is the mean of the six
+consistency partitions, exactly as recorded by the evaluator.
+
+### Block-8 diagnostic proxy
+
+Block-8 was intentionally trained without semantic token prediction, so it
+cannot produce the semantic-token likelihood used for the paper's downstream
+metrics. For diagnostic coverage only, we compared paired samples by a
+two-sample Monte Carlo flow-matching-loss preference proxy:
+
+| Proxy metric | Block-8 85k |
+|---|---:|
+| sWUGGY dev proxy | 49.35 |
+| sBLIMP dev proxy | 49.82 |
+| SALMon consistency proxy | 59.25 |
+| SALMon sentiment proxy | 49.00 |
+| SALMon background proxy | 51.00 |
+
+These values are near chance and are **not paper-comparable likelihood
+metrics**. They diagnose the limitation of the current Block-8 objective rather
+than constitute a failed reproduction of a metric that architecture cannot
+compute. Raw outputs are in
+[`results/block8-85k-zerospeech-dev-flow-proxy.json`](results/block8-85k-zerospeech-dev-flow-proxy.json)
+and
+[`results/block8-85k-salmon-flow-proxy.json`](results/block8-85k-salmon-flow-proxy.json).
 
 ### What can and cannot currently be claimed
 
@@ -202,16 +265,48 @@ Can be claimed:
 - full MLS training completed for our original and Block-8 implementations;
 - both runs reached 85,000 finite optimizer steps and produced final
   checkpoints;
-- the authors' released checkpoint loads strictly after restoring the
-  paper-era non-learned resampling buffer;
-- the SALMon evaluation path runs end-to-end on that released checkpoint.
+- both final trained checkpoints export and load strictly;
+- our original 85k checkpoint exceeds the paper's sWUGGY, sBLIMP, and SALMon
+  consistency values under the pinned public likelihood evaluators;
+- six matched continuation examples were generated and validated.
 
-Cannot yet be claimed:
+Cannot be claimed:
 
-- that our newly trained model matches the paper's SALMon scores;
-- that the complete Tables I-III results were reproduced;
-- that generation metrics match until the Whisper, LLaMA, WavLM-TDNN,
-  emotion2vec, and WavLM feature pipelines are pinned and executed.
+- exact reproduction of all reported values, because two SALMon targets were
+  missed;
+- that Block-8 proxy scores are comparable to semantic-token likelihood;
+- that complete Tables I-III were reproduced, because the released repository
+  lacks complete pinned implementations for genPPL, speaker similarity,
+  emotion2vec FSD, and WavLM FSD;
+- that three qualitative samples per model substitute for the paper's full
+  500-prompt, four-continuation generation evaluation.
+
+## Audio continuations
+
+Job `3468449` generated three matched-prompt continuations from each final
+checkpoint. Each example uses the same 3-second LibriSpeech prompt and seed for
+the two models, and extends the waveform to 10 seconds total.
+
+| Setting | Value |
+|---|---:|
+| Seed | 20260820 |
+| Sample rate | 24 kHz, mono |
+| ODE solver / steps | Euler / 32 |
+| CFG scale | 0.3 |
+| Semantic / flow temperature | 0.8 / 0.8 |
+| Top-p | 0.95 |
+
+Validation job `3468457` confirmed that every WAV contains 240,000 finite
+samples with zero clipped-sample fraction. Original-model RMS ranged from
+0.0424 to 0.0731 and peak magnitude from 0.543 to 0.625; Block-8 RMS ranged
+from 0.0695 to 0.0858 and peak magnitude from 0.543 to 0.914.
+
+- [Original-model continuations](audio_continuations/original)
+- [Block-8 continuations](audio_continuations/block8)
+- [Machine-readable generation and validation manifest](audio_continuations/manifest.json)
+
+The six WAVs are versioned in GitHub commit
+[`79557c4`](https://github.com/Cicicai379/flow-slm/commit/79557c4).
 
 ## Smoke tests and validation
 
@@ -223,6 +318,13 @@ Cannot yet be claimed:
 | Block utility unit tests | local unittest | 3/3 passed |
 | Python compilation checks | local | Passed |
 | Slurm launcher shell syntax | local | Passed |
+| Final checkpoint export and strict load | `3468448` | Completed for both models |
+| Matched audio generation | `3468449` | Completed; six WAVs |
+| Audio validation and copy | `3468457` | Completed; finite, 10 s, no clipping |
+| SALMon final evaluation | `3468450` | Completed; all eight partitions |
+| ZeroSpeech dev original + Block proxy | `3468497` | Completed (`0:0`) in 00:55:14 |
+| ZeroSpeech exact test original | `3468508` | Completed (`0:0`) in 02:14:57 |
+| Final result collection | `3468509` | Completed (`0:0`) |
 
 Smoke-test W&B links:
 
@@ -258,6 +360,14 @@ Smoke-test W&B links:
 | `3456434` | Cancelled after 1:08:10 | Short Block-8 full-MLS validation/backfill; released GPUs for original production startup |
 | `3456432` | Completed | Final original training run |
 | `3456847` | Completed | Final Block-8 training run, resuming only its own Block-8 checkpoint |
+| `3468444` | Failed | Initial export attempt exposed missing `CUDA_HOME`; launcher fixed before successful rerun |
+| `3468445` | Reported failed after successful staging | Archive checksum/extraction succeeded; a final `find | head` under `pipefail` caused SIGPIPE and was replaced by explicit count checks |
+| `3468448` | Completed | Exported both 85k checkpoints and verified strict loads |
+| `3468449`, `3468457` | Completed | Generated, validated, and copied six matched audio continuations |
+| `3468450` | Completed | Evaluated original SALMon likelihood and Block-8 diagnostic proxy |
+| `3468497` | Completed | Evaluated ZeroSpeech development for original and Block-8 proxy |
+| `3468508` | Completed | Evaluated exact ZeroSpeech test for the trained original model |
+| `3468509` | Completed | Collected all final JSON results into the repository |
 
 ## Reproduction commands
 
@@ -276,9 +386,21 @@ From the repository root:
 /accounts/projects/berkeleynlp/anyaji/safe_submit.sh \
   sbatch reproduction/slurm_checkpoint_smoke.sbatch
 
-# Released-checkpoint SALMon baseline
+# Final trained-checkpoint SALMon evaluation
 /accounts/projects/berkeleynlp/anyaji/safe_submit.sh \
-  sbatch reproduction/slurm_salmon_270m.sbatch
+  sbatch reproduction/slurm_eval_trained_salmon.sbatch
+
+# ZeroSpeech development: trained original followed by Block-8 proxy
+/accounts/projects/berkeleynlp/anyaji/safe_submit.sh \
+  sbatch reproduction/slurm_eval_zerospeech.sbatch
+
+# Exact ZeroSpeech test: trained original
+/accounts/projects/berkeleynlp/anyaji/safe_submit.sh \
+  sbatch reproduction/slurm_eval_zerospeech_test_original.sbatch
+
+# Matched continuation generation
+/accounts/projects/berkeleynlp/anyaji/safe_submit.sh \
+  sbatch reproduction/slurm_generate_audio_smoke.sbatch
 ```
 
 Do not use `/scratch` or `/accounts` for datasets, model checkpoints, W&B
@@ -286,20 +408,19 @@ buffers, Hugging Face caches, Triton caches, or extension builds. Only the
 existing Python environment executable remains under `/scratch`; high-volume
 runtime state belongs in the executing node's `/data/cicicai` tree.
 
-## Next steps for a strict paper-result claim
+## Remaining work for a complete paper-table claim
 
-1. Consolidate/export the original 85k DeepSpeed checkpoint into the state-dict
-   format expected by the evaluation code.
-2. Run strict forward compatibility checks on the exported checkpoint.
-3. Evaluate our checkpoint on all SALMon partitions and compare against the
-   target row above.
-4. Obtain/pin ZeroSpeech 2021 and evaluate sWUGGY and sBLIMP.
-5. Generate four continuations for each of the paper's 500 LibriSpeech prompts
-   using the recorded inference settings.
-6. Pin and execute genPPL, speaker similarity, emotion2vec FSD, and WavLM FSD
-   scoring pipelines.
-7. Record seeds, evaluator commits, per-metric confidence intervals, and exact
-   differences from the paper before claiming reproduction.
+1. Obtain or independently reconstruct the exact pinned genPPL,
+   speaker-similarity, emotion2vec-FSD, and WavLM-FSD pipelines, which are not
+   fully implemented in the released repository.
+2. Generate four continuations for each of the paper's 500 LibriSpeech test
+   prompts and execute those four metric pipelines.
+3. Investigate the 5.50-point SALMon sentiment-alignment gap (seed variance,
+   training-data/version drift, and optimizer/runtime differences are possible
+   contributors) instead of treating the current result as an exact match.
+4. If paper-comparable linguistic evaluation is required for Block-8, add and
+   train a semantic-token prediction head; the present flow-loss proxy cannot
+   replace it.
 
 ## Source files
 
@@ -308,6 +429,9 @@ runtime state belongs in the executing node's `/data/cicicai` tree.
 - Original production launcher: [`slurm_train_270m.sbatch`](slurm_train_270m.sbatch)
 - Block production launcher: [`../blockwise/slurm_train_block8.sbatch`](../blockwise/slurm_train_block8.sbatch)
 - SALMon evaluator: [`eval_salmon.py`](eval_salmon.py)
+- Final trained SALMon evaluator: [`eval_trained_salmon.py`](eval_trained_salmon.py)
+- ZeroSpeech evaluator: [`eval_zerospeech_likelihood.py`](eval_zerospeech_likelihood.py)
+- Audio manifest: [`audio_continuations/manifest.json`](audio_continuations/manifest.json)
+- Raw evaluation results: [`results/`](results)
 - Paper targets: [`paper_targets.yaml`](paper_targets.yaml)
 - Blockwise design: [`../blockwise/PLAN.md`](../blockwise/PLAN.md)
-

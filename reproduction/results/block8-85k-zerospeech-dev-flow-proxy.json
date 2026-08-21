@@ -1,0 +1,39 @@
+{
+  "checkpoint": "/data/cicicai/flow_slm/evaluation/exports/block8-85k/pytorch_model.bin",
+  "mc_samples": 2,
+  "model": "block8",
+  "official_zerospeech2021_scorer_commit": "199624adfba52901bab564b076fe7d4a63f47ddb",
+  "sBLIMP": {
+    "broad_type_macro_percent": 49.414806547619044,
+    "by_type_percent": {
+      "anaphor_agreement": 50.625,
+      "argument_structure": 48.16666666666667,
+      "binding": 50.6,
+      "control_raising": 49.65,
+      "determiner_noun_agreement": 51.90625,
+      "ellipsis": 44.75,
+      "filler_gap_dependency": 49.75,
+      "irregular_forms": 48.125,
+      "island_effects": 50.357142857142854,
+      "npi_licensing": 50.21428571428571,
+      "quantifiers": 49.5,
+      "subject_verb_agreement": 49.333333333333336
+    },
+    "official_pair_weighted_percent": 49.82142857142857,
+    "pairs": 6300
+  },
+  "sWUGGY": {
+    "all_percent": 49.3525,
+    "by_frequency_percent": {
+      "1-5": 49.69806763285024,
+      "21-100": 48.76099120703437,
+      "6-20": 49.600127959053104,
+      ">100": 51.22641509433963,
+      "oov": 49.11
+    },
+    "in_vocab_percent": 49.595,
+    "pairs": 10000
+  },
+  "score_type": "mc_flow_matching_loss_proxy_not_paper_comparable",
+  "split": "dev"
+}

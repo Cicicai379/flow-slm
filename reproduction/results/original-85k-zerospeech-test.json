@@ -1,0 +1,39 @@
+{
+  "checkpoint": "/data/cicicai/flow_slm/evaluation/exports/original-85k/pytorch_model.bin",
+  "mc_samples": 1,
+  "model": "original",
+  "official_zerospeech2021_scorer_commit": "199624adfba52901bab564b076fe7d4a63f47ddb",
+  "sBLIMP": {
+    "broad_type_macro_percent": 62.074494047619055,
+    "by_type_percent": {
+      "anaphor_agreement": 74.25,
+      "argument_structure": 57.766666666666666,
+      "binding": 54.64,
+      "control_raising": 60.62,
+      "determiner_noun_agreement": 74.275,
+      "ellipsis": 71.6,
+      "filler_gap_dependency": 55.1875,
+      "irregular_forms": 66.14999999999999,
+      "island_effects": 47.15714285714286,
+      "npi_licensing": 53.81428571428572,
+      "quantifiers": 70.43333333333334,
+      "subject_verb_agreement": 59.0
+    },
+    "official_pair_weighted_percent": 59.62539682539683,
+    "pairs": 63000
+  },
+  "sWUGGY": {
+    "all_percent": 69.98875,
+    "by_frequency_percent": {
+      "1-5": 74.25604007071303,
+      "21-100": 84.43877551020408,
+      "6-20": 79.6191247974068,
+      ">100": 87.45107632093934,
+      "oov": 60.173750000000005
+    },
+    "in_vocab_percent": 79.80375,
+    "pairs": 40000
+  },
+  "score_type": "semantic_token_log_likelihood",
+  "split": "test"
+}
